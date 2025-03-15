@@ -1,11 +1,227 @@
-import { View, Text, StyleSheet, ScrollView } from "react-native"
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
 import { LineChart, PieChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
 import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp } from "lucide-react-native"
+import { useState, useEffect, useCallback } from "react"
+import { supabase } from "../../lib/supabase"
+import { useFocusEffect } from "@react-navigation/native"
 
 const screenWidth = Dimensions.get("window").width
 
 export default function DashboardScreen() {
+  const [loading, setLoading] = useState(true)
+  const [dashboardData, setDashboardData] = useState({
+    clientCount: 0,
+    productCount: 0,
+    totalRevenue: 0,
+    totalSales: 0,
+    clientGrowth: 0,
+    productGrowth: 0,
+    revenueGrowth: 0,
+    salesGrowth: 0,
+    monthlyRevenue: [0, 0, 0, 0, 0, 0],
+    categorySales: [],
+    topClients: []
+  })
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboardData()
+    }, [])
+  )
+
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      // Fetch client count
+      const { data: clients, error: clientError } = await supabase
+        .from('clients')
+        .select('id, created_at')
+      
+      if (clientError) {
+        console.error("Client fetch error:", clientError)
+        throw clientError
+      }
+      
+      console.log("Fetched clients:", clients?.length || 0)
+      
+      // Fetch product count
+      const { data: products, error: productError } = await supabase
+        .from('products')
+        .select('id, category_id, created_at')
+      
+      if (productError) throw productError
+
+      // Fetch sales data
+      const { data: sales, error: salesError } = await supabase
+        .from('sales')
+        .select('id, amount, product_id, created_at')
+      
+      if (salesError) throw salesError
+
+      // Calculate total revenue
+      const totalRevenue = sales ? sales.reduce((sum, sale) => sum + (sale.amount || 0), 0) : 0
+      
+      // Calculate monthly revenue (last 6 months)
+      const monthlyRevenue = calculateMonthlyRevenue(sales || [])
+      
+      // Calculate category sales
+      const categorySales = calculateCategorySales(sales || [], products || [])
+      
+      // Calculate growth percentages
+      const clientGrowth = calculateGrowth(clients || [], 'created_at')
+      const productGrowth = calculateGrowth(products || [], 'created_at')
+      const revenueGrowth = 15 // Placeholder - replace with actual calculation
+      const salesGrowth = sales ? (sales.length > 0 ? -3 : 0) : 0 // Placeholder
+
+      // Fetch sales with client information
+      const { data: salesWithClients, error: salesClientError } = await supabase
+        .from('sales')
+        .select(`
+          amount,
+          clients:client_id (
+            id, name
+          )
+        `)
+      
+      if (salesClientError) throw salesClientError
+
+      // Calculate top clients by revenue
+      const clientRevenue = {}
+      salesWithClients?.forEach(sale => {
+        if (sale.clients && sale.clients.id) {
+          const clientId = sale.clients.id
+          const clientName = sale.clients.name
+          if (!clientRevenue[clientId]) {
+            clientRevenue[clientId] = { id: clientId, name: clientName, total: 0 }
+          }
+          clientRevenue[clientId].total += (sale.amount || 0)
+        }
+      })
+
+      // Convert to array and sort by revenue
+      const topClients = Object.values(clientRevenue)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 4)
+
+      setDashboardData({
+        clientCount: clients?.length || 0,
+        productCount: products?.length || 0,
+        totalRevenue,
+        totalSales: sales?.length || 0,
+        clientGrowth,
+        productGrowth,
+        revenueGrowth,
+        salesGrowth,
+        monthlyRevenue,
+        categorySales,
+        topClients
+      })
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const calculateMonthlyRevenue = (sales) => {
+    const months = Array(6).fill(0)
+    const now = new Date()
+    
+    sales.forEach(sale => {
+      const saleDate = new Date(sale.created_at)
+      const monthDiff = (now.getMonth() - saleDate.getMonth()) + 
+                        (now.getFullYear() - saleDate.getFullYear()) * 12
+      
+      if (monthDiff >= 0 && monthDiff < 6) {
+        months[5 - monthDiff] += (sale.amount || 0)
+      }
+    })
+    
+    return months
+  }
+
+  const calculateCategorySales = (sales, products) => {
+    const categories = {
+      "Food": { population: 0, color: "#F47B20" },
+      "Drink": { population: 0, color: "#2196F3" },
+      "Snack": { population: 0, color: "#4CAF50" },
+      "Dessert": { population: 0, color: "#9C27B0" }
+    }
+    
+    // Create a map of product_id to category_id
+    const productCategories = {}
+    products.forEach(product => {
+      productCategories[product.id] = product.category_id
+    })
+    
+    // Count sales by category
+    sales.forEach(sale => {
+      const categoryId = productCategories[sale.product_id]
+      const categoryName = getCategoryName(categoryId)
+      if (categories[categoryName]) {
+        categories[categoryName].population += 1
+      }
+    })
+    
+    // Convert to array format needed for PieChart
+    return Object.entries(categories).map(([name, data]) => ({
+      name,
+      population: data.population || 1, // Ensure at least 1 for display
+      color: data.color,
+      legendFontColor: "#7F7F7F",
+      legendFontSize: 12
+    }))
+  }
+
+  const getCategoryName = (categoryId) => {
+    // Map category IDs to names - replace with actual mapping from your database
+    const categoryMap = {
+      1: "Food",
+      2: "Drink",
+      3: "Snack",
+      4: "Dessert"
+    }
+    return categoryMap[categoryId] || "Food"
+  }
+
+  const calculateGrowth = (items, dateField) => {
+    if (!items.length) return 0
+    
+    const now = new Date()
+    const oneMonthAgo = new Date()
+    oneMonthAgo.setMonth(now.getMonth() - 1)
+    const twoMonthsAgo = new Date()
+    twoMonthsAgo.setMonth(now.getMonth() - 2)
+    
+    const currentPeriodItems = items.filter(item => {
+      const date = new Date(item[dateField])
+      return date >= oneMonthAgo && date <= now
+    })
+    
+    const previousPeriodItems = items.filter(item => {
+      const date = new Date(item[dateField])
+      return date >= twoMonthsAgo && date < oneMonthAgo
+    })
+    
+    if (previousPeriodItems.length === 0) return currentPeriodItems.length > 0 ? 100 : 0
+    
+    return Math.round(((currentPeriodItems.length - previousPeriodItems.length) / previousPeriodItems.length) * 100)
+  }
+
+  const formatCurrency = (amount) => {
+    return `$${amount.toLocaleString('en-US', { maximumFractionDigits: 1 })}k`
+  }
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#F47B20" />
+        <Text style={styles.loadingText}>Loading dashboard data...</Text>
+      </View>
+    )
+  }
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.pageTitle}>Admin Dashboard</Text>
@@ -16,11 +232,22 @@ export default function DashboardScreen() {
             <View style={styles.statsIconContainer}>
               <Users size={20} color="#F47B20" />
             </View>
-            <Text style={styles.statsValue}>24</Text>
+            <Text style={styles.statsValue}>{dashboardData.clientCount}</Text>
             <Text style={styles.statsLabel}>Total Clients</Text>
-            <View style={styles.statsChange}>
-              <ArrowUp size={12} color="#4CAF50" />
-              <Text style={styles.statsChangeText}>+12%</Text>
+            <View style={[
+              styles.statsChange,
+              dashboardData.clientGrowth < 0 ? styles.statsChangeNegative : null
+            ]}>
+              {dashboardData.clientGrowth >= 0 ? 
+                <ArrowUp size={12} color="#4CAF50" /> : 
+                <ArrowDown size={12} color="#F44336" />
+              }
+              <Text style={dashboardData.clientGrowth >= 0 ? 
+                styles.statsChangeText : 
+                styles.statsChangeTextNegative
+              }>
+                {dashboardData.clientGrowth >= 0 ? '+' : ''}{dashboardData.clientGrowth}%
+              </Text>
             </View>
           </View>
 
@@ -28,11 +255,22 @@ export default function DashboardScreen() {
             <View style={styles.statsIconContainer}>
               <ShoppingBag size={20} color="#F47B20" />
             </View>
-            <Text style={styles.statsValue}>142</Text>
+            <Text style={styles.statsValue}>{dashboardData.productCount}</Text>
             <Text style={styles.statsLabel}>Total Products</Text>
-            <View style={styles.statsChange}>
-              <ArrowUp size={12} color="#4CAF50" />
-              <Text style={styles.statsChangeText}>+8%</Text>
+            <View style={[
+              styles.statsChange,
+              dashboardData.productGrowth < 0 ? styles.statsChangeNegative : null
+            ]}>
+              {dashboardData.productGrowth >= 0 ? 
+                <ArrowUp size={12} color="#4CAF50" /> : 
+                <ArrowDown size={12} color="#F44336" />
+              }
+              <Text style={dashboardData.productGrowth >= 0 ? 
+                styles.statsChangeText : 
+                styles.statsChangeTextNegative
+              }>
+                {dashboardData.productGrowth >= 0 ? '+' : ''}{dashboardData.productGrowth}%
+              </Text>
             </View>
           </View>
         </View>
@@ -42,11 +280,22 @@ export default function DashboardScreen() {
             <View style={styles.statsIconContainer}>
               <DollarSign size={20} color="#F47B20" />
             </View>
-            <Text style={styles.statsValue}>$45.2k</Text>
+            <Text style={styles.statsValue}>{formatCurrency(dashboardData.totalRevenue/1000)}</Text>
             <Text style={styles.statsLabel}>Total Revenue</Text>
-            <View style={styles.statsChange}>
-              <ArrowUp size={12} color="#4CAF50" />
-              <Text style={styles.statsChangeText}>+15%</Text>
+            <View style={[
+              styles.statsChange,
+              dashboardData.revenueGrowth < 0 ? styles.statsChangeNegative : null
+            ]}>
+              {dashboardData.revenueGrowth >= 0 ? 
+                <ArrowUp size={12} color="#4CAF50" /> : 
+                <ArrowDown size={12} color="#F44336" />
+              }
+              <Text style={dashboardData.revenueGrowth >= 0 ? 
+                styles.statsChangeText : 
+                styles.statsChangeTextNegative
+              }>
+                {dashboardData.revenueGrowth >= 0 ? '+' : ''}{dashboardData.revenueGrowth}%
+              </Text>
             </View>
           </View>
 
@@ -54,11 +303,22 @@ export default function DashboardScreen() {
             <View style={styles.statsIconContainer}>
               <TrendingUp size={20} color="#F47B20" />
             </View>
-            <Text style={styles.statsValue}>1,234</Text>
+            <Text style={styles.statsValue}>{dashboardData.totalSales}</Text>
             <Text style={styles.statsLabel}>Total Sales</Text>
-            <View style={[styles.statsChange, styles.statsChangeNegative]}>
-              <ArrowDown size={12} color="#F44336" />
-              <Text style={styles.statsChangeTextNegative}>-3%</Text>
+            <View style={[
+              styles.statsChange,
+              dashboardData.salesGrowth < 0 ? styles.statsChangeNegative : null
+            ]}>
+              {dashboardData.salesGrowth >= 0 ? 
+                <ArrowUp size={12} color="#4CAF50" /> : 
+                <ArrowDown size={12} color="#F44336" />
+              }
+              <Text style={dashboardData.salesGrowth >= 0 ? 
+                styles.statsChangeText : 
+                styles.statsChangeTextNegative
+              }>
+                {dashboardData.salesGrowth >= 0 ? '+' : ''}{dashboardData.salesGrowth}%
+              </Text>
             </View>
           </View>
         </View>
@@ -71,7 +331,9 @@ export default function DashboardScreen() {
             labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
             datasets: [
               {
-                data: [20, 45, 28, 80, 99, 43],
+                data: dashboardData.monthlyRevenue.length > 0 ? 
+                  dashboardData.monthlyRevenue : 
+                  [20, 45, 28, 80, 99, 43],
                 color: (opacity = 1) => `rgba(244, 123, 32, ${opacity})`,
                 strokeWidth: 2,
               },
@@ -110,36 +372,39 @@ export default function DashboardScreen() {
         <View style={[styles.chartCard, styles.halfChart]}>
           <Text style={styles.chartTitle}>Sales by Category</Text>
           <PieChart
-            data={[
-              {
-                name: "Food",
-                population: 45,
-                color: "#F47B20",
-                legendFontColor: "#7F7F7F",
-                legendFontSize: 12,
-              },
-              {
-                name: "Drink",
-                population: 28,
-                color: "#2196F3",
-                legendFontColor: "#7F7F7F",
-                legendFontSize: 12,
-              },
-              {
-                name: "Snack",
-                population: 17,
-                color: "#4CAF50",
-                legendFontColor: "#7F7F7F",
-                legendFontSize: 12,
-              },
-              {
-                name: "Dessert",
-                population: 10,
-                color: "#9C27B0",
-                legendFontColor: "#7F7F7F",
-                legendFontSize: 12,
-              },
-            ]}
+            data={dashboardData.categorySales.length > 0 ? 
+              dashboardData.categorySales : 
+              [
+                {
+                  name: "Food",
+                  population: 45,
+                  color: "#F47B20",
+                  legendFontColor: "#7F7F7F",
+                  legendFontSize: 12,
+                },
+                {
+                  name: "Drink",
+                  population: 28,
+                  color: "#2196F3",
+                  legendFontColor: "#7F7F7F",
+                  legendFontSize: 12,
+                },
+                {
+                  name: "Snack",
+                  population: 17,
+                  color: "#4CAF50",
+                  legendFontColor: "#7F7F7F",
+                  legendFontSize: 12,
+                },
+                {
+                  name: "Dessert",
+                  population: 10,
+                  color: "#9C27B0",
+                  legendFontColor: "#7F7F7F",
+                  legendFontSize: 12,
+                },
+              ]
+            }
             width={screenWidth / 2 - 30}
             height={180}
             chartConfig={{
@@ -158,22 +423,16 @@ export default function DashboardScreen() {
         <View style={[styles.chartCard, styles.halfChart]}>
           <Text style={styles.chartTitle}>Top Clients</Text>
           <View style={styles.clientsList}>
-            <View style={styles.clientItem}>
-              <Text style={styles.clientName}>Nusantara Restaurant</Text>
-              <Text style={styles.clientValue}>$12.5k</Text>
-            </View>
-            <View style={styles.clientItem}>
-              <Text style={styles.clientName}>Spice Garden</Text>
-              <Text style={styles.clientValue}>$8.3k</Text>
-            </View>
-            <View style={styles.clientItem}>
-              <Text style={styles.clientName}>Ocean Delight</Text>
-              <Text style={styles.clientValue}>$6.7k</Text>
-            </View>
-            <View style={styles.clientItem}>
-              <Text style={styles.clientName}>Urban Bites</Text>
-              <Text style={styles.clientValue}>$5.2k</Text>
-            </View>
+            {dashboardData.topClients.length > 0 ? (
+              dashboardData.topClients.map(client => (
+                <View key={client.id} style={styles.clientItem}>
+                  <Text style={styles.clientName}>{client.name}</Text>
+                  <Text style={styles.clientValue}>{formatCurrency(client.total/1000)}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No client data available</Text>
+            )}
           </View>
         </View>
       </View>
@@ -290,6 +549,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "bold",
     color: "#333",
+  },
+  emptyText: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    padding: 10,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#666',
   },
 })
 

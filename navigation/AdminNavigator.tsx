@@ -3,7 +3,7 @@ import { Home, BarChart2, ShoppingBag, Users, Settings } from "lucide-react-nati
 import DashboardScreen from "../screens/admin/DashboardScreen"
 import AnalyticsScreen from "../screens/admin/AnalyticsScreen"
 import InventoryScreen from "../screens/admin/InventoryScreen"
-import ClientsScreen from "../screens/admin/ClientsScreen"
+import ManageClientsScreen from "../screens/admin/ManageClientsScreen"
 import SettingsScreen from "../screens/admin/SettingsScreen"
 
 const Tab = createBottomTabNavigator()
@@ -52,7 +52,7 @@ export default function AdminNavigator() {
       />
       <Tab.Screen
         name="Clients"
-        component={ClientsScreen}
+        component={ManageClientsScreen}
         options={{
           tabBarIcon: ({ color }) => <Users size={24} color={color} />,
         }}

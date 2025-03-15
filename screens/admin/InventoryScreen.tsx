@@ -42,12 +42,20 @@ export default function InventoryScreen() {
     image: "/placeholder.svg",
   });
   const [categories, setCategories] = useState<Category[]>([]);
+  const [showSellModal, setShowSellModal] = useState(false);
+  const [sellingProduct, setSellingProduct] = useState<Product | null>(null);
+  const [sellQuantity, setSellQuantity] = useState("1");
+  const [clients, setClients] = useState<{id: string, name: string}[]>([]);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [quantityError, setQuantityError] = useState<string | null>(null);
+  const [isQuantityValid, setIsQuantityValid] = useState(true);
 
   // Fetch products from Supabase
   useFocusEffect(
     useCallback(() => {
       fetchProducts();
       fetchCategories();
+      fetchClients();
     }, [])
   );
 
@@ -102,6 +110,27 @@ export default function InventoryScreen() {
         if (data.length > 0 && !newProduct.category_id) {
           setNewProduct({...newProduct, category_id: data[0].id});
         }
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  const fetchClients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, name')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching clients:', error);
+        return;
+      }
+      
+      if (data && data.length > 0) {
+        setClients(data);
+        setSelectedClientId(data[0].id); // Set first client as default
       }
     } catch (error) {
       console.error('Error:', error);
@@ -320,6 +349,75 @@ export default function InventoryScreen() {
     setShowEditModal(true);
   };
 
+  const handleSellProduct = (product: Product) => {
+    setSellingProduct(product);
+    setSellQuantity("1");
+    setQuantityError(null);
+    setIsQuantityValid(true);
+    
+    // Set default client if available
+    if (clients.length > 0 && !selectedClientId) {
+      setSelectedClientId(clients[0].id);
+    }
+    setShowSellModal(true);
+  };
+
+  const confirmSale = async () => {
+    if (!sellingProduct || !selectedClientId) {
+      Alert.alert("Error", "Please select a client");
+      return;
+    }
+    
+    const quantity = parseInt(sellQuantity);
+    if (isNaN(quantity) || quantity <= 0) {
+      Alert.alert("Invalid Quantity", "Please enter a valid quantity");
+      return;
+    }
+    
+    if (quantity > sellingProduct.stock) {
+      Alert.alert("Insufficient Stock", "Not enough items in stock");
+      return;
+    }
+    
+    try {
+      // 1. Update product stock
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ stock: sellingProduct.stock - quantity })
+        .eq('id', sellingProduct.id);
+      
+      if (updateError) throw updateError;
+      
+      // 2. Record the sale with the selected client
+      const { error: saleError } = await supabase
+        .from('sales')
+        .insert([{
+          product_id: sellingProduct.id,
+          client_id: selectedClientId,
+          amount: sellingProduct.sellingPrice * quantity,
+          quantity: quantity
+        }]);
+      
+      if (saleError) throw saleError;
+      
+      // 3. Update local state
+      setProducts(products.map(p => 
+        p.id === sellingProduct.id 
+          ? {...p, stock: p.stock - quantity} 
+          : p
+      ));
+      
+      // 4. Close modal and show success message
+      setShowSellModal(false);
+      setSellingProduct(null);
+      Alert.alert("Success", `Sale recorded. ${quantity} item${quantity > 1 ? 's' : ''} sold.`);
+      
+    } catch (error) {
+      console.error('Error processing sale:', error);
+      Alert.alert("Error", "Failed to process sale");
+    }
+  };
+
   const filteredProducts = products.filter((product) => {
     if (activeCategory !== "All" && product.categoryName !== activeCategory) {
       return false;
@@ -329,6 +427,38 @@ export default function InventoryScreen() {
     }
     return true;
   });
+
+  // Create a function to validate quantity
+  const validateQuantity = (value: string) => {
+    const quantity = parseInt(value);
+    
+    if (!value.trim()) {
+      setQuantityError("Quantity is required");
+      setIsQuantityValid(false);
+      return;
+    }
+    
+    if (isNaN(quantity) || quantity <= 0) {
+      setQuantityError("Please enter a valid quantity");
+      setIsQuantityValid(false);
+      return;
+    }
+    
+    if (sellingProduct && quantity > sellingProduct.stock) {
+      setQuantityError(`Exceeds available stock (${sellingProduct.stock})`);
+      setIsQuantityValid(false);
+      return;
+    }
+    
+    setQuantityError(null);
+    setIsQuantityValid(true);
+  };
+
+  // Update the setSellQuantity handler
+  const handleQuantityChange = (text: string) => {
+    setSellQuantity(text);
+    validateQuantity(text);
+  };
 
   return (
     <View style={styles.container}>
@@ -392,25 +522,30 @@ export default function InventoryScreen() {
               <View key={product.id} style={styles.productCard}>
                 <Image 
                   source={product.image.startsWith('/') 
-                    ? { uri: "https://via.placeholder.com/100" } 
+                    ? { uri: "https://via.placeholder.com/80" } 
                     : { uri: product.image }} 
                   style={styles.productImage} 
                 />
                 <View style={styles.productInfo}>
-                  <Text style={styles.productName}>{product.name}</Text>
-                  <Text style={styles.productCategory}>{product.categoryName}</Text>
-                  <View style={styles.priceContainer}>
-                    <Text style={styles.productCostPrice}>Cost: {product.price} MAD</Text>
-                    <Text style={styles.productPrice}>Sell: {product.sellingPrice} MAD</Text>
-                  </View>
-                  <View style={styles.stockContainer}>
-                    <Text style={styles.stockLabel}>Stock:</Text>
-                    <Text style={[styles.stockValue, product.stock === 0 && styles.stockValueEmpty]}>
-                      {product.stock === 0 ? "Out of stock" : product.stock}
-                    </Text>
+                  <View>
+                    <Text style={styles.productName}>{product.name}</Text>
+                    <Text style={styles.productCategory}>{product.categoryName}</Text>
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.productCostPrice}>Cost: {product.price} MAD</Text>
+                      <Text style={styles.productPrice}>Sell: {product.sellingPrice} MAD</Text>
+                    </View>
+                    <View style={styles.stockContainer}>
+                      <Text style={styles.stockLabel}>Stock:</Text>
+                      <Text style={[styles.stockValue, product.stock === 0 && styles.stockValueEmpty]}>
+                        {product.stock === 0 ? "Out of stock" : product.stock}
+                      </Text>
+                    </View>
                   </View>
                 </View>
                 <View style={styles.productActions}>
+                  <TouchableOpacity style={styles.sellButton} onPress={() => handleSellProduct(product)}>
+                    <Text style={styles.sellButtonText}>Sell</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.editButton} onPress={() => handleEditProduct(product)}>
                     <Edit2 size={16} color="#F47B20" />
                   </TouchableOpacity>
@@ -633,6 +768,93 @@ export default function InventoryScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Sell Product Modal */}
+      {sellingProduct && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showSellModal}
+          onRequestClose={() => setShowSellModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Sell Product</Text>
+                <TouchableOpacity onPress={() => setShowSellModal(false)}>
+                  <X size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.sellModalContent}>
+                <Text style={styles.sellProductName}>{sellingProduct.name}</Text>
+                <Text style={styles.sellProductPrice}>Price: {sellingProduct.sellingPrice} MAD</Text>
+                <Text style={styles.sellProductStock}>Available: {sellingProduct.stock} items</Text>
+                
+                <Text style={styles.sellClientLabel}>Client:</Text>
+                <View style={styles.clientPickerContainer}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {clients.map(client => (
+                      <TouchableOpacity 
+                        key={client.id}
+                        style={[
+                          styles.clientOption,
+                          selectedClientId === client.id && styles.clientOptionSelected
+                        ]}
+                        onPress={() => setSelectedClientId(client.id)}
+                      >
+                        <Text style={[
+                          styles.clientOptionText,
+                          selectedClientId === client.id && styles.clientOptionTextSelected
+                        ]}>
+                          {client.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                
+                <Text style={styles.sellQuantityLabel}>Quantity:</Text>
+                <View style={styles.quantityInputContainer}>
+                  <TextInput
+                    style={[styles.quantityInput, !isQuantityValid && styles.quantityInputError]}
+                    keyboardType="numeric"
+                    value={sellQuantity}
+                    onChangeText={handleQuantityChange}
+                  />
+                  {quantityError && (
+                    <Text style={styles.quantityErrorText}>{quantityError}</Text>
+                  )}
+                </View>
+                
+                <Text style={styles.sellTotalLabel}>Total:</Text>
+                <Text style={styles.sellTotal}>
+                  {sellingProduct.sellingPrice * parseInt(sellQuantity || "0")} MAD
+                </Text>
+                
+                <View style={styles.sellModalActions}>
+                  <TouchableOpacity 
+                    style={styles.cancelSellButton} 
+                    onPress={() => setShowSellModal(false)}
+                  >
+                    <Text style={styles.cancelSellButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[
+                      styles.confirmSellButton, 
+                      !isQuantityValid && styles.confirmSellButtonDisabled
+                    ]} 
+                    onPress={confirmSale}
+                    disabled={!isQuantityValid}
+                  >
+                    <Text style={styles.confirmSellButtonText}>Confirm Sale</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -737,6 +959,7 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     flex: 1,
+    marginRight: 10, // Add margin to create space between info and actions
   },
   productName: {
     fontSize: 16,
@@ -749,18 +972,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   priceContainer: {
-    flexDirection: "row",
     marginBottom: 8,
   },
   productCostPrice: {
     fontSize: 14,
     color: "#666",
-    marginRight: 10,
+    marginBottom: 4,
   },
   productPrice: {
     fontSize: 14,
     fontWeight: "600",
     color: "#F47B20",
+    marginBottom: 4,
   },
   stockContainer: {
     flexDirection: "row",
@@ -779,14 +1002,32 @@ const styles = StyleSheet.create({
     color: "#F44336",
   },
   productActions: {
-    justifyContent: "space-around",
-    paddingLeft: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    width: 50,
+    marginLeft: 5, // Add left margin to create more separation
+  },
+  sellButton: {
+    backgroundColor: "#F47B20",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginBottom: 8,
+    alignItems: "center",
+    width: "100%",
+  },
+  sellButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
   },
   editButton: {
-    padding: 8,
+    marginBottom: 8,
+    padding: 4,
   },
   deleteButton: {
-    padding: 8,
+    padding: 4,
   },
   modalOverlay: {
     flex: 1,
@@ -915,5 +1156,122 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "600",
     fontSize: 16,
+  },
+  sellModalContent: {
+    padding: 10,
+  },
+  sellProductName: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 10,
+  },
+  sellProductPrice: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 5,
+  },
+  sellProductStock: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 20,
+  },
+  sellClientLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 15,
+    marginBottom: 8,
+  },
+  clientPickerContainer: {
+    marginBottom: 15,
+  },
+  clientOption: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    marginRight: 8,
+  },
+  clientOptionSelected: {
+    backgroundColor: "#F47B20",
+  },
+  clientOptionText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  clientOptionTextSelected: {
+    color: "white",
+    fontWeight: "600",
+  },
+  sellQuantityLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 5,
+  },
+  quantityInputContainer: {
+    marginBottom: 20,
+  },
+  quantityInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 4,
+    padding: 10,
+    fontSize: 16,
+  },
+  quantityInputError: {
+    borderColor: "#F44336",
+  },
+  quantityErrorText: {
+    color: "#F44336",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  sellTotalLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 5,
+  },
+  sellTotal: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#F47B20",
+    marginBottom: 20,
+  },
+  sellModalActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  cancelSellButton: {
+    backgroundColor: "#f5f5f5",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 4,
+    flex: 1,
+    marginRight: 10,
+    alignItems: "center",
+  },
+  cancelSellButtonText: {
+    color: "#666",
+    fontWeight: "600",
+  },
+  confirmSellButton: {
+    backgroundColor: "#F47B20",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 4,
+    flex: 1,
+    alignItems: "center",
+  },
+  confirmSellButtonText: {
+    color: "white",
+    fontWeight: "600",
+  },
+  confirmSellButtonDisabled: {
+    backgroundColor: "#cccccc",
+    opacity: 0.7,
+  },
+  errorText: {
+    color: "#F44336",
+    fontSize: 14,
+    marginBottom: 10,
   },
 });

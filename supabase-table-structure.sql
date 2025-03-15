@@ -58,3 +58,24 @@ CREATE POLICY "Users can manage their own profile" ON public.profiles
 -- Create index for better performance
 CREATE INDEX products_category_id_idx ON public.products(category_id);
 
+-- Create sales table
+CREATE TABLE public.sales (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id uuid REFERENCES public.products(id) NOT NULL,
+  client_id uuid REFERENCES public.clients(id) NOT NULL,
+  amount integer NOT NULL,
+  quantity integer NOT NULL DEFAULT 1,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+-- Set up Row Level Security
+ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
+
+-- Create policy to allow all operations
+CREATE POLICY "Allow all operations" ON public.sales
+  FOR ALL USING (true);
+
+-- Create index for better performance
+CREATE INDEX sales_product_id_idx ON public.sales(product_id);
+CREATE INDEX sales_client_id_idx ON public.sales(client_id);
+

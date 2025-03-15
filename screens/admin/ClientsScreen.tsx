@@ -1,58 +1,61 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image } from "react-native"
 import { Search, Plus, Edit2, Trash2, Filter, Mail, Phone } from "lucide-react-native"
+import { supabase } from "../../lib/supabase"
+import { useFocusEffect } from "@react-navigation/native"
 
-const initialClients = [
-  {
-    id: "1",
-    name: "Nusantara Restaurant",
-    email: "info@nusantara.com",
-    phone: "+62 812 3456 7890",
-    address: "Jl. Sudirman No. 123, Jakarta",
-    status: "active",
-    revenue: 12500,
-    image: "/placeholder.svg",
-  },
-  {
-    id: "2",
-    name: "Spice Garden",
-    email: "contact@spicegarden.com",
-    phone: "+62 813 9876 5432",
-    address: "Jl. Gatot Subroto No. 45, Jakarta",
-    status: "active",
-    revenue: 8300,
-    image: "/placeholder.svg",
-  },
-  {
-    id: "3",
-    name: "Ocean Delight",
-    email: "hello@oceandelight.com",
-    phone: "+62 857 1234 5678",
-    address: "Jl. Thamrin No. 67, Jakarta",
-    status: "inactive",
-    revenue: 6700,
-    image: "/placeholder.svg",
-  },
-  {
-    id: "4",
-    name: "Urban Bites",
-    email: "support@urbanbites.com",
-    phone: "+62 878 8765 4321",
-    address: "Jl. Kuningan No. 89, Jakarta",
-    status: "active",
-    revenue: 5200,
-    image: "/placeholder.svg",
-  },
-]
+// Define the Client type
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  status: string;
+  revenue: number;
+  image: string;
+}
 
 export default function ClientsScreen() {
-  const [clients, setClients] = useState(initialClients)
+  const [clients, setClients] = useState<Client[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("All")
 
   const statuses = ["All", "Active", "Inactive"]
+
+  // Fetch clients from Supabase
+  useFocusEffect(
+    useCallback(() => {
+      fetchClients();
+    }, [])
+  );
+
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      console.log("Fetching clients...");
+      
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*');
+      
+      if (error) {
+        console.error('Error fetching clients:', error);
+        return;
+      }
+      
+      console.log("Clients fetched:", data?.length || 0);
+      console.log("Client data:", JSON.stringify(data));
+      setClients(data || []);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredClients = clients.filter((client) => {
     if (statusFilter !== "All" && client.status.toLowerCase() !== statusFilter.toLowerCase()) {
@@ -106,47 +109,59 @@ export default function ClientsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.clientsList}>
-        {filteredClients.map((client) => (
-          <View key={client.id} style={styles.clientCard}>
-            <Image source={{ uri: "https://via.placeholder.com/100" }} style={styles.clientImage} />
-            <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>{client.name}</Text>
-              <View style={styles.contactRow}>
-                <Mail size={14} color="#666" style={styles.contactIcon} />
-                <Text style={styles.contactText}>{client.email}</Text>
-              </View>
-              <View style={styles.contactRow}>
-                <Phone size={14} color="#666" style={styles.contactIcon} />
-                <Text style={styles.contactText}>{client.phone}</Text>
-              </View>
-              <View style={styles.clientFooter}>
-                <View
-                  style={[styles.statusBadge, client.status === "active" ? styles.statusActive : styles.statusInactive]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      client.status === "active" ? styles.statusTextActive : styles.statusTextInactive,
-                    ]}
-                  >
-                    {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
-                  </Text>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text>Loading clients...</Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.clientsList}>
+          {filteredClients.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No clients found</Text>
+            </View>
+          ) : (
+            filteredClients.map((client) => (
+              <View key={client.id} style={styles.clientCard}>
+                <Image source={{ uri: "https://via.placeholder.com/100" }} style={styles.clientImage} />
+                <View style={styles.clientInfo}>
+                  <Text style={styles.clientName}>{client.name}</Text>
+                  <View style={styles.contactRow}>
+                    <Mail size={14} color="#666" style={styles.contactIcon} />
+                    <Text style={styles.contactText}>{client.email}</Text>
+                  </View>
+                  <View style={styles.contactRow}>
+                    <Phone size={14} color="#666" style={styles.contactIcon} />
+                    <Text style={styles.contactText}>{client.phone}</Text>
+                  </View>
+                  <View style={styles.clientFooter}>
+                    <View
+                      style={[styles.statusBadge, client.status === "active" ? styles.statusActive : styles.statusInactive]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusText,
+                          client.status === "active" ? styles.statusTextActive : styles.statusTextInactive,
+                        ]}
+                      >
+                        {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
+                      </Text>
+                    </View>
+                    <Text style={styles.revenueText}>${client.revenue}</Text>
+                  </View>
                 </View>
-                <Text style={styles.revenueText}>${client.revenue}</Text>
+                <View style={styles.clientActions}>
+                  <TouchableOpacity style={styles.editButton}>
+                    <Edit2 size={16} color="#F47B20" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteClient(client.id)}>
+                    <Trash2 size={16} color="#F44336" />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-            <View style={styles.clientActions}>
-              <TouchableOpacity style={styles.editButton}>
-                <Edit2 size={16} color="#F47B20" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteClient(client.id)}>
-                <Trash2 size={16} color="#F44336" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
+            ))
+          )}
+        </ScrollView>
+      )}
     </View>
   )
 }
@@ -319,6 +334,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(244, 67, 54, 0.1)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
   },
 })
 
