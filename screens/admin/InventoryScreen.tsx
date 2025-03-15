@@ -70,7 +70,8 @@ export default function InventoryScreen() {
             id,
             name
           )
-        `);
+        `)
+        .order('created_at', { ascending: false }); // Sort by created_at in descending order
       
       if (error) {
         console.error('Error fetching products:', error);
@@ -181,7 +182,8 @@ export default function InventoryScreen() {
           categoryName: product.categories?.name || 'Unknown'
         }));
         
-        setProducts([...products, ...transformedData]);
+        // Add the new product to the beginning of the products array
+        setProducts([...transformedData, ...products]);
         Alert.alert("Success", "Product added successfully");
       }
       

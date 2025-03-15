@@ -20,6 +20,7 @@ export default function DashboardScreen() {
     revenueGrowth: 0,
     salesGrowth: 0,
     monthlyRevenue: [0, 0, 0, 0, 0, 0],
+    monthlyRevenueLabels: [],
     categorySales: [],
     topClients: []
   })
@@ -63,7 +64,7 @@ export default function DashboardScreen() {
       const totalRevenue = sales ? sales.reduce((sum, sale) => sum + (sale.amount || 0), 0) : 0
       
       // Calculate monthly revenue (last 6 months)
-      const monthlyRevenue = calculateMonthlyRevenue(sales || [])
+      const { data: monthlyRevenueData, labels: monthlyRevenueLabels } = calculateMonthlyRevenue(sales || [])
       
       // Calculate category sales
       const categorySales = calculateCategorySales(sales || [], products || [])
@@ -113,7 +114,8 @@ export default function DashboardScreen() {
         productGrowth,
         revenueGrowth,
         salesGrowth,
-        monthlyRevenue,
+        monthlyRevenue: monthlyRevenueData,
+        monthlyRevenueLabels,
         categorySales,
         topClients
       })
@@ -128,17 +130,35 @@ export default function DashboardScreen() {
     const months = Array(6).fill(0)
     const now = new Date()
     
+    // Create array of month labels (last 6 months)
+    const monthNames = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date()
+      d.setMonth(now.getMonth() - i)
+      // Add to the end of the array, not the beginning
+      monthNames.push(d.toLocaleString('default', { month: 'short' }))
+    }
+    
+    console.log("Current month:", now.toLocaleString('default', { month: 'long' }))
+    console.log("Month labels:", monthNames)
+    
     sales.forEach(sale => {
       const saleDate = new Date(sale.created_at)
+      console.log("Sale date:", sale.created_at, "parsed as:", saleDate.toISOString())
+      
       const monthDiff = (now.getMonth() - saleDate.getMonth()) + 
                         (now.getFullYear() - saleDate.getFullYear()) * 12
       
+      console.log("Month diff:", monthDiff, "Index:", 5 - monthDiff)
+      
       if (monthDiff >= 0 && monthDiff < 6) {
+        // This is correct - most recent month (diff=0) goes to index 5
         months[5 - monthDiff] += (sale.amount || 0)
       }
     })
     
-    return months
+    console.log("Final monthly data:", months)
+    return { data: months, labels: monthNames }
   }
 
   const calculateCategorySales = (sales, products) => {
@@ -210,7 +230,12 @@ export default function DashboardScreen() {
   }
 
   const formatCurrency = (amount) => {
-    return `$${amount.toLocaleString('en-US', { maximumFractionDigits: 1 })}k`
+    if (amount >= 1) {
+      return `${amount.toLocaleString('en-US', { maximumFractionDigits: 1 })}k MAD`
+    } else {
+      // For values less than 1k, show the actual value without 'k'
+      return `${(amount * 1000).toLocaleString('en-US')} MAD`
+    }
   }
 
   if (loading) {
@@ -328,7 +353,7 @@ export default function DashboardScreen() {
         <Text style={styles.chartTitle}>Revenue Overview</Text>
         <LineChart
           data={{
-            labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+            labels: dashboardData.monthlyRevenueLabels || ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
             datasets: [
               {
                 data: dashboardData.monthlyRevenue.length > 0 ? 
