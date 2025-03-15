@@ -1,10 +1,10 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
-import { Home, BarChart2, ShoppingBag, Users, Settings } from "lucide-react-native"
+import { Home, BarChart2, ShoppingBag, Settings, History } from "lucide-react-native"
 import DashboardScreen from "../screens/admin/DashboardScreen"
 import AnalyticsScreen from "../screens/admin/AnalyticsScreen"
 import InventoryScreen from "../screens/admin/InventoryScreen"
-import ManageClientsScreen from "../screens/admin/ManageClientsScreen"
-import SettingsScreen from "../screens/admin/SettingsScreen"
+import SalesHistoryScreen from "../screens/admin/SalesHistoryScreen"
+import SettingsStack from "./SettingsStack"
 
 const Tab = createBottomTabNavigator()
 
@@ -51,15 +51,15 @@ export default function AdminNavigator() {
         }}
       />
       <Tab.Screen
-        name="Clients"
-        component={ManageClientsScreen}
+        name="Sales"
+        component={SalesHistoryScreen}
         options={{
-          tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+          tabBarIcon: ({ color }) => <History size={24} color={color} />,
         }}
       />
       <Tab.Screen
         name="Settings"
-        component={SettingsScreen}
+        component={SettingsStack}
         options={{
           tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
         }}

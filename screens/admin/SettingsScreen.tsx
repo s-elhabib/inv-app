@@ -1,13 +1,51 @@
-"use client"
+import React, { useState, useEffect } from 'react'
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Switch, 
+  TouchableOpacity, 
+  ScrollView,
+  Alert,
+  Modal,
+  TextInput
+} from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../lib/supabase'
+import { 
+  User, 
+  Bell, 
+  Moon, 
+  LogOut, 
+  Shield, 
+  HelpCircle,
+  Users,
+  Lock,
+  Globe,
+  Plus,
+  Tag,
+  Edit2,
+  Trash2,
+  ChevronRight,
+  Check,
+  X
+} from 'lucide-react-native'
+import { useNavigation } from "@react-navigation/native"
+import { StackNavigationProp } from "@react-navigation/stack"
 
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, TextInput, Modal, Alert } from "react-native"
-import { User, Lock, Bell, Globe, Moon, HelpCircle, LogOut, Plus, Edit2, Trash2, X, Tag } from "lucide-react-native"
-import { useAuth } from "../../context/AuthContext"
-import { supabase } from "../../lib/supabase"
-import AsyncStorage from "@react-native-async-storage/async-storage"
+// Define the navigation type
+type SettingsStackParamList = {
+  SettingsMain: undefined;
+  ManageClients: undefined;
+}
+
+type SettingsScreenNavigationProp = StackNavigationProp<SettingsStackParamList, 'SettingsMain'>;
 
 export default function SettingsScreen() {
+  // Use the correct type for navigation
+  const navigation = useNavigation<SettingsScreenNavigationProp>()
+  
   const [darkMode, setDarkMode] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const { logout, user } = useAuth()
@@ -372,6 +410,10 @@ export default function SettingsScreen() {
     }
   };
 
+  const navigateToClients = () => {
+    navigation.navigate('ManageClients')
+  }
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.pageTitle}>Settings</Text>
@@ -402,6 +444,23 @@ export default function SettingsScreen() {
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>Password</Text>
             <Text style={styles.settingDescription}>Change your password</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Add Clients Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Clients</Text>
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={navigateToClients}
+        >
+          <View style={styles.settingIconContainer}>
+            <Users size={20} color="#F47B20" />
+          </View>
+          <View style={styles.settingContent}>
+            <Text style={styles.settingTitle}>Manage Clients</Text>
+            <Text style={styles.settingDescription}>View and edit client information</Text>
           </View>
         </TouchableOpacity>
       </View>

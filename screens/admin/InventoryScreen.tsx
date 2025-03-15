@@ -6,6 +6,7 @@ import { Search, Plus, Edit2, Trash2, Filter, X, Camera } from "lucide-react-nat
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
+import { useNavigation } from '@react-navigation/native';
 
 // Define the Product type
 interface Product {
@@ -49,6 +50,12 @@ export default function InventoryScreen() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [quantityError, setQuantityError] = useState<string | null>(null);
   const [isQuantityValid, setIsQuantityValid] = useState(true);
+  const [showEditSaleModal, setShowEditSaleModal] = useState(false);
+  const [editingSale, setEditingSale] = useState<any>(null);
+  const [editSaleQuantity, setEditSaleQuantity] = useState("");
+  const [editSaleClientId, setEditSaleClientId] = useState<string | null>(null);
+
+  const navigation = useNavigation();
 
   // Fetch products from Supabase
   useFocusEffect(
@@ -462,6 +469,108 @@ export default function InventoryScreen() {
     validateQuantity(text);
   };
 
+  // Add this function to handle editing a sale
+  const handleEditSale = async (sale: any) => {
+    // Fetch the current sale details
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*, clients(*)')
+        .eq('id', sale.id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching sale:', error);
+        Alert.alert("Error", "Failed to fetch sale details");
+        return;
+      }
+      
+      if (data) {
+        setEditingSale(data);
+        setEditSaleQuantity(data.quantity.toString());
+        setEditSaleClientId(data.client_id);
+        setShowEditSaleModal(true);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      Alert.alert("Error", "An unexpected error occurred");
+    }
+  };
+
+  // Add this function to update a sale
+  const updateSale = async () => {
+    if (!editingSale || !editSaleClientId) {
+      Alert.alert("Error", "Please select a client");
+      return;
+    }
+    
+    const newQuantity = parseInt(editSaleQuantity);
+    if (isNaN(newQuantity) || newQuantity <= 0) {
+      Alert.alert("Invalid Quantity", "Please enter a valid quantity");
+      return;
+    }
+    
+    // Get the product details
+    const { data: productData, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', editingSale.product_id)
+      .single();
+    
+    if (productError) {
+      console.error('Error fetching product:', productError);
+      Alert.alert("Error", "Failed to fetch product details");
+      return;
+    }
+    
+    const product = productData;
+    
+    // Calculate stock adjustment
+    const stockAdjustment = editingSale.quantity - newQuantity;
+    const newStock = product.stock + stockAdjustment;
+    
+    if (newStock < 0) {
+      Alert.alert("Insufficient Stock", "Not enough items in stock for this adjustment");
+      return;
+    }
+    
+    try {
+      // 1. Update the sale record
+      const { error: saleError } = await supabase
+        .from('sales')
+        .update({
+          client_id: editSaleClientId,
+          quantity: newQuantity,
+          amount: product.sellingPrice * newQuantity
+        })
+        .eq('id', editingSale.id);
+      
+      if (saleError) throw saleError;
+      
+      // 2. Update the product stock
+      const { error: productUpdateError } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', product.id);
+      
+      if (productUpdateError) throw productUpdateError;
+      
+      // 3. Update local state if needed
+      setProducts(products.map(p => 
+        p.id === product.id ? {...p, stock: newStock} : p
+      ));
+      
+      // 4. Close modal and show success message
+      setShowEditSaleModal(false);
+      setEditingSale(null);
+      Alert.alert("Success", "Sale updated successfully");
+      
+    } catch (error) {
+      console.error('Error updating sale:', error);
+      Alert.alert("Error", "Failed to update sale");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -857,6 +966,89 @@ export default function InventoryScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Edit Sale Modal */}
+      {editingSale && (
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showEditSaleModal}
+          onRequestClose={() => setShowEditSaleModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Sale</Text>
+                <TouchableOpacity onPress={() => setShowEditSaleModal(false)}>
+                  <X size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalBody}>
+                <Text style={styles.productName}>{editingSale.products?.name || "Product"}</Text>
+                
+                <Text style={styles.inputLabel}>Client</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={editSaleClientId}
+                    onValueChange={(itemValue) => setEditSaleClientId(itemValue)}
+                    style={styles.picker}
+                  >
+                    {clients.map((client) => (
+                      <Picker.Item key={client.id} label={client.name} value={client.id} />
+                    ))}
+                  </Picker>
+                </View>
+                
+                <Text style={styles.inputLabel}>Quantity</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editSaleQuantity}
+                  onChangeText={(text) => {
+                    setEditSaleQuantity(text);
+                    const quantity = parseInt(text);
+                    setIsQuantityValid(!isNaN(quantity) && quantity > 0);
+                    if (isNaN(quantity) || quantity <= 0) {
+                      setQuantityError("Please enter a valid quantity");
+                    } else {
+                      setQuantityError(null);
+                    }
+                  }}
+                  keyboardType="numeric"
+                  placeholder="Quantity"
+                />
+                {quantityError && <Text style={styles.errorText}>{quantityError}</Text>}
+                
+                <View style={styles.sellModalActions}>
+                  <TouchableOpacity 
+                    style={styles.cancelSellButton} 
+                    onPress={() => setShowEditSaleModal(false)}
+                  >
+                    <Text style={styles.cancelSellButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[
+                      styles.confirmSellButton, 
+                      !isQuantityValid && styles.confirmSellButtonDisabled
+                    ]} 
+                    onPress={updateSale}
+                    disabled={!isQuantityValid}
+                  >
+                    <Text style={styles.confirmSellButtonText}>Update Sale</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      <TouchableOpacity 
+        style={styles.salesHistoryButton}
+        onPress={() => navigation.navigate('SalesHistory')}
+      >
+        <Text style={styles.salesHistoryButtonText}>View Sales History</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -1275,5 +1467,19 @@ const styles = StyleSheet.create({
     color: "#F44336",
     fontSize: 14,
     marginBottom: 10,
+  },
+  salesHistoryButton: {
+    backgroundColor: "#F47B20",
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    margin: 15,
+  },
+  salesHistoryButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
