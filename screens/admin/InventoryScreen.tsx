@@ -1043,12 +1043,7 @@ export default function InventoryScreen() {
         </Modal>
       )}
 
-      <TouchableOpacity 
-        style={styles.salesHistoryButton}
-        onPress={() => navigation.navigate('SalesHistory')}
-      >
-        <Text style={styles.salesHistoryButtonText}>View Sales History</Text>
-      </TouchableOpacity>
+      {/* Removed View Sales History button */}
     </View>
   );
 }
@@ -1468,18 +1463,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 10,
   },
-  salesHistoryButton: {
-    backgroundColor: "#F47B20",
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    margin: 15,
-  },
-  salesHistoryButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  // Removed salesHistoryButton and salesHistoryButtonText styles
 });

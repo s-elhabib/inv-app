@@ -3,8 +3,10 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Modal, TextI
 import { supabase } from '../../lib/supabase';
 import { Edit2, X, Search } from 'lucide-react-native';
 import { Picker } from '@react-native-picker/picker';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function SalesHistoryScreen() {
+  const isFocused = useIsFocused();
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,9 +21,11 @@ export default function SalesHistoryScreen() {
   const [quantityError, setQuantityError] = useState(null);
 
   useEffect(() => {
-    fetchSales();
-    fetchClients();
-  }, []);
+    if (isFocused) {
+      fetchSales();
+      fetchClients();
+    }
+  }, [isFocused]);
 
   const fetchSales = async () => {
     try {
@@ -36,7 +40,7 @@ export default function SalesHistoryScreen() {
           products:product_id(id, name, sellingPrice),
           clients:client_id(id, name)
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }); // Ensure most recent sales appear first
 
       if (error) throw error;
       setSales(data || []);
@@ -167,9 +171,12 @@ export default function SalesHistoryScreen() {
 
       <FlatList
         data={filteredSales}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item: sale }) => (
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item: sale, index }) => (
           <View style={styles.saleItem}>
+            {index === 0 && (
+              <Text style={styles.latestSaleIndicator}>Latest Sale</Text>
+            )}
             <View style={styles.saleHeader}>
               <Text style={styles.productName}>{sale.products?.name}</Text>
               <Text style={styles.saleAmount}>${sale.amount}</Text>
@@ -458,5 +465,18 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  latestSaleIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: '#F47B20',
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    zIndex: 1,
   },
 });
