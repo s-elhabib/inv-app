@@ -29,6 +29,7 @@ export default function ClientsScreen() {
   // Fetch clients from Supabase
   useFocusEffect(
     useCallback(() => {
+      console.log("ClientsScreen focused - fetching clients");
       fetchClients();
     }, [])
   );
@@ -48,7 +49,6 @@ export default function ClientsScreen() {
       }
       
       console.log("Clients fetched:", data?.length || 0);
-      console.log("Client data:", JSON.stringify(data));
       setClients(data || []);
     } catch (error) {
       console.error('Error:', error);

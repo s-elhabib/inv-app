@@ -6,30 +6,63 @@ import {
   FlatList, 
   TouchableOpacity, 
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  TextInput
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { Edit, Trash2, Plus, Search } from 'lucide-react-native';
-import { TextInput } from 'react-native';
+import { Edit, Trash2, Plus, Search, Phone, Mail } from 'lucide-react-native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 
-export default function ManageClientsScreen({ navigation }) {
+export default function ManageClientsScreen({ navigation, route }) {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const isFocused = useIsFocused();
 
+  // Check for new or updated client data from route params
   useEffect(() => {
-    fetchClients();
-  }, []);
+    // Handle new client
+    if (route.params?.newClient) {
+      console.log('New client received:', route.params.newClient);
+      fetchClients(); // Fetch all clients to ensure we have the latest data
+      // Clear the params to prevent duplicate fetches
+      navigation.setParams({ newClient: null, timestamp: null });
+    }
+    
+    // Handle updated client
+    if (route.params?.updatedClient) {
+      console.log('Updated client received:', route.params.updatedClient);
+      fetchClients(); // Fetch all clients to ensure we have the latest data
+      // Clear the params to prevent duplicate fetches
+      navigation.setParams({ updatedClient: null, timestamp: null });
+    }
+  }, [route.params?.newClient, route.params?.updatedClient, route.params?.timestamp]);
+
+  // Fetch clients when screen is focused
+  useEffect(() => {
+    if (isFocused) {
+      console.log('ManageClientsScreen is focused - fetching clients');
+      fetchClients();
+    }
+  }, [isFocused]);
 
   const fetchClients = async () => {
     try {
       setLoading(true);
+      console.log('Fetching clients...');
+      
+      // Use a more reliable query with explicit ordering
       const { data, error } = await supabase
         .from('clients')
         .select('*')
-        .order('name');
+        .order('name', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching clients:', error);
+        throw error;
+      }
+      
+      console.log(`Fetched ${data?.length || 0} clients`);
       setClients(data || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -39,43 +72,19 @@ export default function ManageClientsScreen({ navigation }) {
     }
   };
 
+  // Filter clients based on search query
   const filteredClients = clients.filter(client => 
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (client.email && client.email.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const renderItem = ({ item }) => (
-    <View style={styles.clientCard}>
-      <View style={styles.clientInfo}>
-        <Text style={styles.clientName}>{item.name}</Text>
-        {item.email && <Text style={styles.clientEmail}>{item.email}</Text>}
-        {item.phone && <Text style={styles.clientPhone}>{item.phone}</Text>}
-      </View>
-      <View style={styles.actions}>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditClient(item)}
-        >
-          <Edit size={16} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteClient(item)}
-        >
-          <Trash2 size={16} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </View>
+    (client.email && client.email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (client.phone && client.phone.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleAddClient = () => {
-    // Navigate to add client screen or show modal
-    Alert.alert('Add Client', 'This would open a form to add a new client');
+    navigation.navigate('AddEditClient');
   };
 
   const handleEditClient = (client) => {
-    // Navigate to edit client screen or show modal
-    Alert.alert('Edit Client', `This would open a form to edit ${client.name}`);
+    navigation.navigate('AddEditClient', { client });
   };
 
   const handleDeleteClient = (client) => {
@@ -96,8 +105,8 @@ export default function ManageClientsScreen({ navigation }) {
               
               if (error) throw error;
               
-              // Refresh client list
-              fetchClients();
+              // Update local state
+              setClients(clients.filter(c => c.id !== client.id));
               Alert.alert('Success', 'Client deleted successfully');
             } catch (error) {
               console.error('Error deleting client:', error);
@@ -108,6 +117,57 @@ export default function ManageClientsScreen({ navigation }) {
       ]
     );
   };
+
+  const renderItem = ({ item }) => (
+    <View style={styles.clientCard}>
+      <View style={styles.clientInfo}>
+        <Text style={styles.clientName}>{item.name}</Text>
+        
+        {item.email && (
+          <View style={styles.contactRow}>
+            <Mail size={14} color="#666" style={styles.contactIcon} />
+            <Text style={styles.clientEmail}>{item.email}</Text>
+          </View>
+        )}
+        
+        {item.phone && (
+          <View style={styles.contactRow}>
+            <Phone size={14} color="#666" style={styles.contactIcon} />
+            <Text style={styles.clientPhone}>{item.phone}</Text>
+          </View>
+        )}
+        
+        {item.status && (
+          <View style={[
+            styles.statusBadge, 
+            item.status === 'active' ? styles.activeBadge : styles.inactiveBadge
+          ]}>
+            <Text style={[
+              styles.statusText,
+              item.status === 'active' ? styles.activeText : styles.inactiveText
+            ]}>
+              {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+            </Text>
+          </View>
+        )}
+      </View>
+      
+      <View style={styles.actions}>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.editButton]}
+          onPress={() => handleEditClient(item)}
+        >
+          <Edit size={16} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.deleteButton]}
+          onPress={() => handleDeleteClient(item)}
+        >
+          <Trash2 size={16} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   if (loading) {
     return (
@@ -178,14 +238,14 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 16,
+    paddingBottom: 80,
   },
   clientCard: {
+    flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     elevation: 2,
   },
   clientInfo: {
@@ -195,19 +255,50 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
+    color: '#333',
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  contactIcon: {
+    marginRight: 6,
   },
   clientEmail: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
   },
   clientPhone: {
     fontSize: 14,
     color: '#666',
   },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  activeBadge: {
+    backgroundColor: '#e6f7ee',
+  },
+  inactiveBadge: {
+    backgroundColor: '#ffebee',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  activeText: {
+    color: '#4CAF50',
+  },
+  inactiveText: {
+    color: '#F44336',
+  },
   actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   actionButton: {
     width: 36,
@@ -215,10 +306,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
   },
   editButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#F47B20',
   },
   deleteButton: {
     backgroundColor: '#F44336',
