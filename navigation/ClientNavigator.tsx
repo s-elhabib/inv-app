@@ -1,42 +1,39 @@
 "use client"
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
+import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { View, Text, StyleSheet } from "react-native"
 import { Home, BarChart2, ShoppingBag } from "lucide-react-native"
 import HomeScreen from "../screens/client/HomeScreen"
 import AnalysisScreen from "../screens/client/AnalysisScreen"
 import StoreScreen from "../screens/client/StoreScreen"
 import { useAuth } from "../context/AuthContext"
+import { useTheme } from '../context/ThemeContext';
+import { colors } from '../theme/colors';
 
-const Tab = createBottomTabNavigator()
+const Stack = createNativeStackNavigator()
 
 export default function ClientNavigator() {
-  const { user } = useAuth()
+  const { user } = useAuth();
+  const { theme } = useTheme();
 
   return (
-    <Tab.Navigator
+    <Stack.Navigator
       screenOptions={{
-        tabBarActiveTintColor: "#F47B20",
-        tabBarInactiveTintColor: "#999",
-        tabBarStyle: {
-          height: 60,
-          paddingBottom: 10,
-        },
         headerStyle: {
-          backgroundColor: "#fff",
-          elevation: 0,
-          shadowOpacity: 0,
-          borderBottomWidth: 0,
+          backgroundColor: colors[theme].card,
         },
+        headerTintColor: colors[theme].text,
         headerTitleStyle: {
-          fontWeight: "bold",
+          color: colors[theme].text,
+        },
+        contentStyle: {
+          backgroundColor: colors[theme].background,
         },
       }}
     >
-      <Tab.Screen
+      <Stack.Screen
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarIcon: ({ color }) => <Home size={24} color={color} />,
           headerTitle: () => (
             <View style={styles.headerContainer}>
               <Text style={styles.welcomeText}>Welcome Back!</Text>
@@ -45,21 +42,21 @@ export default function ClientNavigator() {
           ),
         }}
       />
-      <Tab.Screen
+      <Stack.Screen
         name="Analysis"
         component={AnalysisScreen}
         options={{
-          tabBarIcon: ({ color }) => <BarChart2 size={24} color={color} />,
+          headerTitle: "Analysis",
         }}
       />
-      <Tab.Screen
+      <Stack.Screen
         name="Store"
         component={StoreScreen}
         options={{
-          tabBarIcon: ({ color }) => <ShoppingBag size={24} color={color} />,
+          headerTitle: "Store",
         }}
       />
-    </Tab.Navigator>
+    </Stack.Navigator>
   )
 }
 

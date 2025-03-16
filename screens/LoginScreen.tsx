@@ -1,162 +1,118 @@
-"use client"
-
-import { useState } from "react"
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from "react-native"
-import { useNavigation } from "@react-navigation/native"
-import { useAuth } from "../context/AuthContext"
+import React, { useState } from 'react';
+import { StyleSheet, View, Image } from 'react-native';
+import { BaseScreen } from '../components/BaseScreen';
+import { 
+  StyledText, 
+  StyledCard, 
+  StyledButton, 
+  StyledInput 
+} from '../components/StyledComponents';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import { colors } from '../theme/colors';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const navigation = useNavigation()
-  const { login, isLoading: authLoading } = useAuth()
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter both username and password")
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      console.log(`Attempting to login with: ${email}/${password}`);
-      const success = await login(email, password)
-      console.log(`Login success: ${success}`);
-      
-      if (!success) {
-        Alert.alert("Login Failed", "Invalid username or password")
-      }
-      // Navigation will be handled in App.tsx based on user role
-    } catch (error) {
-      console.error("Login error:", error);
-      Alert.alert("Error", "An error occurred during login")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Fill in demo credentials for quick testing
-  const fillAdminCredentials = () => {
-    setEmail("admin");
-    setPassword("admin");
-  }
-
-  const fillClientCredentials = () => {
-    setEmail("client");
-    setPassword("client123");
-  }
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { login } = useAuth();
+  const { theme } = useTheme();
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoContainer}>
-        <Text style={styles.title}>Inventory Management</Text>
-      </View>
-
-      <View style={styles.formContainer}>
-        <Text style={styles.label}>Username</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter your username"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-        />
-
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter your password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={handleLogin}
-          disabled={isLoading || authLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.loginButtonText}>Login</Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.hintContainer}>
-          <Text style={styles.hintText}>Demo credentials:</Text>
-          <TouchableOpacity onPress={fillAdminCredentials}>
-            <Text style={[styles.hintText, styles.clickableHint]}>Admin: admin / admin</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={fillClientCredentials}>
-            <Text style={[styles.hintText, styles.clickableHint]}>Client: client / client123</Text>
-          </TouchableOpacity>
+    <BaseScreen>
+      <View style={styles.container}>
+        <View style={styles.logoContainer}>
+          {/* <Image 
+            source={require('../assets/logo.png')} // Make sure to add your logo
+            style={styles.logo}
+            resizeMode="contain"
+          /> */}
+          <StyledText style={styles.welcomeText}>Welcome Back</StyledText>
+          <StyledText style={styles.subtitleText}>
+            Sign in to continue to your account
+          </StyledText>
         </View>
+
+        <StyledCard style={styles.card}>
+          <StyledInput
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            style={styles.input}
+            leftIcon="mail" // If you're using icons
+          />
+          
+          <StyledInput
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            style={styles.input}
+            leftIcon="lock" // If you're using icons
+          />
+          
+          <StyledButton
+            title="Sign In"
+            onPress={() => login(email, password)}
+            style={styles.button}
+          />
+
+          <View style={styles.forgotPasswordContainer}>
+            <StyledText 
+              style={[styles.forgotPasswordText, { color: colors[theme].primary }]}
+              onPress={() => {/* Handle forgot password */}}
+            >
+              Forgot Password?
+            </StyledText>
+          </View>
+        </StyledCard>
       </View>
-    </View>
-  )
+    </BaseScreen>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    justifyContent: 'center',
     padding: 20,
   },
   logoContainer: {
-    alignItems: "center",
-    marginTop: 60,
+    alignItems: 'center',
     marginBottom: 40,
   },
   logo: {
-    width: 100,
-    height: 100,
-    resizeMode: "contain",
+    width: 120,
+    height: 120,
+    marginBottom: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginTop: 10,
-    color: "#333",
-  },
-  formContainer: {
-    width: "100%",
-  },
-  label: {
-    fontSize: 16,
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
     marginBottom: 8,
-    color: "#333",
+  },
+  subtitleText: {
+    fontSize: 16,
+    opacity: 0.7,
+  },
+  card: {
+    borderRadius: 15,
+    padding: 20,
   },
   input: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 20,
-    fontSize: 16,
+    marginBottom: 16,
   },
-  loginButton: {
-    backgroundColor: "#F47B20",
-    borderRadius: 8,
-    padding: 15,
-    alignItems: "center",
-    marginTop: 10,
+  button: {
+    marginTop: 8,
+    height: 50,
+    borderRadius: 25,
   },
-  loginButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+  forgotPasswordContainer: {
+    alignItems: 'center',
+    marginTop: 16,
   },
-  hintContainer: {
-    marginTop: 20,
-    alignItems: "center",
+  forgotPasswordText: {
+    fontSize: 14,
   },
-  hintText: {
-    color: "#666",
-    marginBottom: 5,
-  },
-  clickableHint: {
-    color: "#F47B20",
-    textDecorationLine: "underline",
-  }
-})
+});

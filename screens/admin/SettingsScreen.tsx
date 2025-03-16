@@ -33,6 +33,8 @@ import {
 } from 'lucide-react-native'
 import { useNavigation } from "@react-navigation/native"
 import { StackNavigationProp } from "@react-navigation/stack"
+import { useTheme } from '../../context/ThemeContext'
+import { colors } from '../../theme/colors'
 
 // Define the navigation type
 type SettingsStackParamList = {
@@ -43,7 +45,7 @@ type SettingsStackParamList = {
 type SettingsScreenNavigationProp = StackNavigationProp<SettingsStackParamList, 'SettingsMain'>;
 
 export default function SettingsScreen() {
-  // Use the correct type for navigation
+  const { theme, toggleTheme } = useTheme()
   const navigation = useNavigation<SettingsScreenNavigationProp>()
   
   const [darkMode, setDarkMode] = useState(false)
@@ -415,22 +417,22 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.pageTitle}>Settings</Text>
+    <ScrollView style={[styles.container, { backgroundColor: colors[theme].background }]}>
+      <Text style={[styles.pageTitle, { color: colors[theme].text }]}>Settings</Text>
 
       {/* Account Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
+      <View style={[styles.section, { backgroundColor: colors[theme].card }]}>
+        <Text style={[styles.sectionTitle, { color: colors[theme].text }]}>Account</Text>
         <TouchableOpacity 
           style={styles.settingItem}
           onPress={() => setShowProfileModal(true)}
         >
           <View style={styles.settingIconContainer}>
-            <User size={20} color="#F47B20" />
+            <User size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Profile Information</Text>
-            <Text style={styles.settingDescription}>Update your account details</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Profile Information</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>Update your account details</Text>
           </View>
         </TouchableOpacity>
 
@@ -439,64 +441,64 @@ export default function SettingsScreen() {
           onPress={() => setShowPasswordModal(true)}
         >
           <View style={styles.settingIconContainer}>
-            <Lock size={20} color="#F47B20" />
+            <Lock size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Password</Text>
-            <Text style={styles.settingDescription}>Change your password</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Password</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>Change your password</Text>
           </View>
         </TouchableOpacity>
       </View>
 
       {/* Add Clients Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Clients</Text>
+      <View style={[styles.section, { backgroundColor: colors[theme].card }]}>
+        <Text style={[styles.sectionTitle, { color: colors[theme].text }]}>Clients</Text>
         <TouchableOpacity 
           style={styles.settingItem}
           onPress={navigateToClients}
         >
           <View style={styles.settingIconContainer}>
-            <Users size={20} color="#F47B20" />
+            <Users size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Manage Clients</Text>
-            <Text style={styles.settingDescription}>View and edit client information</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Manage Clients</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>View and edit client information</Text>
           </View>
         </TouchableOpacity>
       </View>
 
       {/* Preferences Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Preferences</Text>
+      <View style={[styles.section, { backgroundColor: colors[theme].card }]}>
+        <Text style={[styles.sectionTitle, { color: colors[theme].text }]}>Preferences</Text>
         <View style={styles.settingItem}>
           <View style={styles.settingIconContainer}>
-            <Bell size={20} color="#F47B20" />
+            <Bell size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Notifications</Text>
-            <Text style={styles.settingDescription}>Receive app notifications</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Notifications</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>Receive app notifications</Text>
           </View>
           <Switch
             value={notifications}
             onValueChange={handleNotificationsToggle}
-            trackColor={{ false: "#E0E0E0", true: "#F47B2080" }}
-            thumbColor={notifications ? "#F47B20" : "#F5F5F5"}
+            trackColor={{ false: colors[theme].border, true: colors[theme].secondary }}
+            thumbColor={notifications ? colors[theme].primary : colors[theme].foreground}
           />
         </View>
 
         <View style={styles.settingItem}>
           <View style={styles.settingIconContainer}>
-            <Moon size={20} color="#F47B20" />
+            <Moon size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Dark Mode</Text>
-            <Text style={styles.settingDescription}>Toggle dark theme</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Dark Mode</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>Toggle dark theme</Text>
           </View>
           <Switch
-            value={darkMode}
-            onValueChange={handleDarkModeToggle}
-            trackColor={{ false: "#E0E0E0", true: "#F47B2080" }}
-            thumbColor={darkMode ? "#F47B20" : "#F5F5F5"}
+            value={theme === 'dark'}
+            onValueChange={toggleTheme}
+            trackColor={{ false: colors[theme].border, true: colors[theme].secondary }}
+            thumbColor={theme === 'dark' ? colors[theme].primary : colors[theme].foreground}
           />
         </View>
 
@@ -505,19 +507,19 @@ export default function SettingsScreen() {
           onPress={() => setShowLanguageModal(true)}
         >
           <View style={styles.settingIconContainer}>
-            <Globe size={20} color="#F47B20" />
+            <Globe size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Language</Text>
-            <Text style={styles.settingDescription}>{language}</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Language</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>{language}</Text>
           </View>
         </TouchableOpacity>
       </View>
 
       {/* New Categories Section */}
-      <View style={styles.section}>
+      <View style={[styles.section, { backgroundColor: colors[theme].card }]}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Product Categories</Text>
+          <Text style={[styles.sectionTitle, { color: colors[theme].text }]}>Product Categories</Text>
           <TouchableOpacity 
             style={styles.addCategoryButton}
             onPress={() => {
@@ -526,35 +528,35 @@ export default function SettingsScreen() {
               setShowCategoryModal(true)
             }}
           >
-            <Plus size={18} color="#F47B20" />
-            <Text style={styles.addCategoryText}>Add Category</Text>
+            <Plus size={18} color={colors[theme].primary} />
+            <Text style={[styles.addCategoryText, { color: colors[theme].text }]}>Add Category</Text>
           </TouchableOpacity>
         </View>
 
         {loading ? (
-          <Text style={styles.loadingText}>Loading categories...</Text>
+          <Text style={[styles.loadingText, { color: colors[theme].textSecondary }]}>Loading categories...</Text>
         ) : categories.length === 0 ? (
-          <Text style={styles.emptyText}>No categories found</Text>
+          <Text style={[styles.emptyText, { color: colors[theme].textSecondary }]}>No categories found</Text>
         ) : (
           <View style={styles.categoriesList}>
             {categories.map((category) => (
               <View key={category.id} style={styles.categoryItem}>
                 <View style={styles.categoryInfo}>
-                  <Tag size={16} color="#F47B20" style={styles.categoryIcon} />
-                  <Text style={styles.categoryName}>{category.name}</Text>
+                  <Tag size={16} color={colors[theme].primary} style={styles.categoryIcon} />
+                  <Text style={[styles.categoryName, { color: colors[theme].text }]}>{category.name}</Text>
                 </View>
                 <View style={styles.categoryActions}>
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => startEditCategory(category)}
                   >
-                    <Edit2 size={16} color="#F47B20" />
+                    <Edit2 size={16} color={colors[theme].primary} />
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => handleDeleteCategory(category)}
                   >
-                    <Trash2 size={16} color="#F44336" />
+                    <Trash2 size={16} color={colors[theme].error} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -564,15 +566,15 @@ export default function SettingsScreen() {
       </View>
 
       {/* Existing Support Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Support</Text>
+      <View style={[styles.section, { backgroundColor: colors[theme].card }]}>
+        <Text style={[styles.sectionTitle, { color: colors[theme].text }]}>Support</Text>
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingIconContainer}>
-            <HelpCircle size={20} color="#F47B20" />
+            <HelpCircle size={20} color={colors[theme].primary} />
           </View>
           <View style={styles.settingContent}>
-            <Text style={styles.settingTitle}>Help Center</Text>
-            <Text style={styles.settingDescription}>Get help with the app</Text>
+            <Text style={[styles.settingTitle, { color: colors[theme].text }]}>Help Center</Text>
+            <Text style={[styles.settingDescription, { color: colors[theme].textSecondary }]}>Get help with the app</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -762,8 +764,6 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F5F5",
-    padding: 15,
   },
   pageTitle: {
     fontSize: 24,
