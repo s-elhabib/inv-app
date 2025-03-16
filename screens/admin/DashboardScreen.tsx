@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, FlatList } from "react-native"
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, FlatList, TextInput } from "react-native"
 import { LineChart, PieChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
-import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X } from "lucide-react-native"
+import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X, Search, Edit2 } from "lucide-react-native"
 import { useState, useEffect, useCallback } from "react"
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
@@ -559,7 +559,7 @@ export default function DashboardScreen() {
                 <View key={order.id} style={styles.orderCard}>
                   <View style={styles.orderHeader}>
                     <Text style={styles.orderDate}>{formatDate(order.created_at)}</Text>
-                    <Text style={styles.orderAmount}>${order.total_amount}</Text>
+                    <Text style={styles.orderAmount}>{formatCurrency(order.total_amount)}</Text>
                   </View>
                   
                   <View style={styles.orderProducts}>
@@ -568,7 +568,7 @@ export default function DashboardScreen() {
                         <Text style={styles.productName}>{sale.products.name}</Text>
                         <View style={styles.productDetails}>
                           <Text style={styles.productQuantity}>x{sale.quantity}</Text>
-                          <Text style={styles.productPrice}>${sale.amount}</Text>
+                          <Text style={styles.productPrice}>{formatCurrency(sale.amount)}</Text>
                         </View>
                       </View>
                     ))}

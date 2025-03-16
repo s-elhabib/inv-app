@@ -14,6 +14,10 @@ import { supabase } from '../../lib/supabase';
 import { Search, Plus, Minus, ShoppingCart, Check, X, ChevronDown } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
+const formatCurrency = (amount: number) => {
+  return `${amount.toFixed(2)} MAD`;
+};
+
 export default function ClientProductSelectionScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -40,6 +44,7 @@ export default function ClientProductSelectionScreen() {
       const { data, error } = await supabase
         .from('clients')
         .select('id, name')
+        .eq('status', 'active')  // Only fetch active clients
         .order('name');
       
       if (error) throw error;
@@ -49,6 +54,7 @@ export default function ClientProductSelectionScreen() {
       if (!selectedClientId && data && data.length > 0) {
         setSelectedClientId(data[0].id);
         setSelectedClientName(data[0].name);
+        setSelectedProducts([]); // Clear cart when setting initial client
       }
     } catch (error) {
       console.error('Error fetching clients:', error);
@@ -321,7 +327,7 @@ export default function ClientProductSelectionScreen() {
             <View style={styles.productItem}>
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{item.name}</Text>
-                <Text style={styles.productPrice}>${item.sellingPrice}</Text>
+                <Text style={styles.productPrice}>{formatCurrency(item.sellingPrice)}</Text>
                 <Text style={styles.productStock}>In stock: {item.stock}</Text>
               </View>
               
@@ -361,7 +367,7 @@ export default function ClientProductSelectionScreen() {
           <Text style={styles.checkoutButtonText}>
             Checkout ({selectedProducts.reduce((sum, p) => sum + p.quantity, 0)} items)
           </Text>
-          <Text style={styles.checkoutAmount}>${totalAmount.toFixed(2)}</Text>
+          <Text style={styles.checkoutAmount}>{formatCurrency(totalAmount)}</Text>
         </TouchableOpacity>
       )}
       
@@ -403,14 +409,14 @@ export default function ClientProductSelectionScreen() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.confirmOrderItemPrice}>
-                    ${(item.sellingPrice * item.quantity).toFixed(2)}
+                    {formatCurrency(item.sellingPrice * item.quantity)}
                   </Text>
                 </View>
               )}
               ListFooterComponent={
                 <View style={styles.confirmOrderTotal}>
                   <Text style={styles.confirmOrderTotalLabel}>Total:</Text>
-                  <Text style={styles.confirmOrderTotalAmount}>${totalAmount.toFixed(2)}</Text>
+                  <Text style={styles.confirmOrderTotalAmount}>{formatCurrency(totalAmount)}</Text>
                 </View>
               }
               contentContainerStyle={styles.confirmOrderItemsList}

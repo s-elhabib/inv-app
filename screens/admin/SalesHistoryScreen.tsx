@@ -5,6 +5,10 @@ import { Edit2, X, Search } from 'lucide-react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useIsFocused } from '@react-navigation/native';
 
+const formatCurrency = (amount: number) => {
+  return `${amount.toFixed(2)} MAD`;
+};
+
 export default function SalesHistoryScreen() {
   const isFocused = useIsFocused();
   const [sales, setSales] = useState([]);
@@ -179,7 +183,7 @@ export default function SalesHistoryScreen() {
             )}
             <View style={styles.saleHeader}>
               <Text style={styles.productName}>{sale.products?.name}</Text>
-              <Text style={styles.saleAmount}>${sale.amount}</Text>
+              <Text style={styles.saleAmount}>{formatCurrency(sale.amount)}</Text>
             </View>
             <View style={styles.saleDetails}>
               <Text style={styles.saleClient}>Client: {sale.clients?.name}</Text>
