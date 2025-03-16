@@ -1,12 +1,15 @@
 {
-  "name": "my-v0-project",
-  "version": "0.1.0",
-  "private": true,
+  "name": "inv-app",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -37,9 +40,9 @@
     "@radix-ui/react-toggle": "^1.1.1",
     "@radix-ui/react-toggle-group": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
-    "@react-native-async-storage/async-storage": "^2.1.2",
-    "@react-native-community/datetimepicker": "^8.3.0",
-    "@react-native-picker/picker": "^2.11.0",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-native-community/datetimepicker": "8.2.0",
+    "@react-native-picker/picker": "2.9.0",
     "@react-navigation/bottom-tabs": "^6.5.11",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
@@ -54,7 +57,7 @@
     "expo": "^52.0.39",
     "expo-file-system": "~18.0.0",
     "expo-image-picker": "~16.0.6",
-    "expo-linking": "~6.2.2",
+    "expo-linking": "~7.0.5",
     "expo-print": "^14.0.3",
     "expo-sharing": "^13.0.1",
     "input-otp": "1.4.1",
@@ -88,7 +91,8 @@
     "@types/react-dom": "~18.3.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@react-native-community/cli": "latest"
   },
   "resolutions": {
     "@react-native-picker/picker": "^2.11.0"

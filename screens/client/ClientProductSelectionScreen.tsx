@@ -35,6 +35,7 @@ export default function ClientProductSelectionScreen() {
   const [selectedClientName, setSelectedClientName] = useState(initialClientName || '');
   const [showClientModal, setShowClientModal] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [customPrices, setCustomPrices] = useState({});
 
   useEffect(() => {
     fetchProducts();
@@ -202,15 +203,18 @@ export default function ClientProductSelectionScreen() {
       
       // 2. Create sales records for each selected product
       for (const product of selectedProducts) {
-        // Create sale record with order_id
+        const finalUnitPrice = product.customPrice || product.sellingPrice;
+        const finalAmount = finalUnitPrice * product.quantity;
+        
         const { error: saleError } = await supabase
           .from('sales')
           .insert({
             client_id: selectedClientId,
             product_id: product.id,
-            order_id: orderId, // Link to the order
+            order_id: orderId,
             quantity: product.quantity,
-            amount: product.sellingPrice * product.quantity,
+            amount: finalAmount,
+            unit_price: finalUnitPrice,
             created_at: new Date().toISOString()
           });
         
@@ -291,7 +295,10 @@ export default function ClientProductSelectionScreen() {
   };
 
   const totalAmount = selectedProducts.reduce(
-    (sum, product) => sum + (product.sellingPrice * product.quantity), 
+    (sum, product) => {
+      const unitPrice = product.customPrice || product.sellingPrice;
+      return sum + (unitPrice * product.quantity);
+    }, 
     0
   );
 
@@ -332,6 +339,19 @@ export default function ClientProductSelectionScreen() {
     setSelectedProducts(selectedProducts.filter(p => p.id !== productId));
   };
 
+  const handlePriceChange = (productId, newUnitPrice) => {
+    setSelectedProducts(current =>
+      current.map(p =>
+        p.id === productId
+          ? { 
+              ...p, 
+              customPrice: parseFloat(newUnitPrice) // Ensure it's a number
+            }
+          : p
+      )
+    );
+  };
+
   if (loading && products.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -340,28 +360,33 @@ export default function ClientProductSelectionScreen() {
     );
   }
 
-  const ConfirmOrderItem = ({ item, onIncrease, onDecrease, onQuantityChange, onRemove }) => {
+  const ConfirmOrderItem = ({ item, onIncrease, onDecrease, onQuantityChange, onRemove, onPriceChange }) => {
     const [isEditing, setIsEditing] = useState(false);
+    const [isTotalEditing, setIsTotalEditing] = useState(false);
     const [tempQuantity, setTempQuantity] = useState(item.quantity.toString());
+    const [tempTotal, setTempTotal] = useState(
+      ((item.customPrice || item.sellingPrice) * item.quantity).toString()
+    );
 
-    const handleQuantitySubmit = () => {
-      const newQuantity = parseInt(tempQuantity);
-      if (!isNaN(newQuantity) && newQuantity >= 0 && newQuantity <= item.stock) {
-        onQuantityChange(item.id, newQuantity);
+    const handleTotalSubmit = () => {
+      const newTotal = parseFloat(tempTotal);
+      if (!isNaN(newTotal) && newTotal >= 0) {
+        // Calculate new unit price based on total and quantity
+        const newUnitPrice = newTotal / item.quantity;
+        onPriceChange(item.id, newUnitPrice);
       } else {
-        setTempQuantity(item.quantity.toString());
+        setTempTotal(((item.customPrice || item.sellingPrice) * item.quantity).toString());
       }
-      setIsEditing(false);
+      setIsTotalEditing(false);
     };
+
+    const itemTotal = (item.customPrice || item.sellingPrice) * item.quantity;
 
     return (
       <View style={styles.confirmOrderItem}>
         <View style={styles.mainContent}>
           <View style={styles.titleRow}>
-            <Text 
-              style={styles.confirmOrderItemName}
-              numberOfLines={2}
-            >
+            <Text style={styles.confirmOrderItemName} numberOfLines={2}>
               {item.name}
             </Text>
             <TouchableOpacity 
@@ -371,41 +396,21 @@ export default function ClientProductSelectionScreen() {
               <X size={18} color="#F44336" />
             </TouchableOpacity>
           </View>
-          
+
           <View style={styles.detailsRow}>
-            <View style={styles.confirmOrderQuantityControls}>
+            {/* Quantity Controls */}
+            <View style={styles.quantityControls}>
               <TouchableOpacity 
                 style={styles.quantityButton}
                 onPress={() => onDecrease(item.id)}
               >
                 <Minus size={16} color="#F47B20" />
               </TouchableOpacity>
-              
-              {isEditing ? (
-                <TextInput
-                  style={styles.quantityInput}
-                  value={tempQuantity}
-                  onChangeText={setTempQuantity}
-                  keyboardType="numeric"
-                  autoFocus
-                  onBlur={handleQuantitySubmit}
-                  onSubmitEditing={handleQuantitySubmit}
-                  selectTextOnFocus
-                />
-              ) : (
-                <TouchableOpacity 
-                  onPress={() => {
-                    setIsEditing(true);
-                    setTempQuantity(item.quantity.toString());
-                  }}
-                  style={styles.quantityDisplay}
-                >
-                  <Text style={styles.confirmOrderItemQuantity}>
-                    {item.quantity}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              
+
+              <Text style={styles.confirmOrderItemQuantity}>
+                {item.quantity}
+              </Text>
+
               <TouchableOpacity 
                 style={styles.quantityButton}
                 onPress={() => onIncrease(item.id)}
@@ -415,13 +420,36 @@ export default function ClientProductSelectionScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* Price Information */}
             <View style={styles.priceContainer}>
-              <Text style={styles.unitPrice}>
-                {formatCurrency(item.sellingPrice)} / unit
+              <Text style={styles.unitPriceText}>
+                Unit: {item.sellingPrice.toFixed(2)} MAD
               </Text>
-              <Text style={styles.confirmOrderItemPrice}>
-                {formatCurrency(item.sellingPrice * item.quantity)}
-              </Text>
+              
+              {isTotalEditing ? (
+                <TextInput
+                  style={styles.totalInput}
+                  value={tempTotal}
+                  onChangeText={setTempTotal}
+                  keyboardType="numeric"
+                  autoFocus
+                  onBlur={handleTotalSubmit}
+                  onSubmitEditing={handleTotalSubmit}
+                  selectTextOnFocus
+                />
+              ) : (
+                <TouchableOpacity 
+                  onPress={() => {
+                    setIsTotalEditing(true);
+                    setTempTotal(itemTotal.toFixed(2));
+                  }}
+                  style={styles.totalDisplay}
+                >
+                  <Text style={styles.totalText}>
+                    Total: {itemTotal.toFixed(2)} MAD
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>
@@ -628,6 +656,7 @@ export default function ClientProductSelectionScreen() {
                   onDecrease={() => handleDecreaseQuantity(item.id)}
                   onQuantityChange={handleQuantityChange}
                   onRemove={handleRemoveItem}
+                  onPriceChange={handlePriceChange}
                 />
               )}
               ListFooterComponent={
@@ -1009,26 +1038,26 @@ const styles = StyleSheet.create({
   },
   confirmOrderItem: {
     backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#eee',
   },
   mainContent: {
     flex: 1,
-    gap: 8,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 8,
+    marginBottom: 8,
   },
   confirmOrderItemName: {
     fontSize: 16,
+    fontWeight: '500',
     flex: 1,
-    color: '#333',
-    lineHeight: 22,
+    marginRight: 8,
   },
   removeButton: {
     padding: 4,
@@ -1037,45 +1066,49 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
   },
-  confirmOrderQuantityControls: {
+  quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 2,
+    gap: 8,
   },
   quantityButton: {
     padding: 8,
-    borderRadius: 6,
+    borderRadius: 4,
+    backgroundColor: '#f5f5f5',
   },
   quantityDisplay: {
     minWidth: 40,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   confirmOrderItemQuantity: {
     fontSize: 16,
-    color: '#333',
     fontWeight: '500',
   },
-  quantityInput: {
-    fontSize: 16,
-    minWidth: 40,
-    textAlign: 'center',
-    padding: 4,
-    backgroundColor: '#fff',
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
+  unitPriceText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  totalInput: {
     borderWidth: 1,
     borderColor: '#F47B20',
     borderRadius: 4,
-  },
-  confirmOrderItemPrice: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#F47B20',
-    minWidth: 80,
+    padding: 4,
+    minWidth: 100,
     textAlign: 'right',
+    fontSize: 16,
+  },
+  totalDisplay: {
+    padding: 4,
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#F47B20',
   },
   confirmOrderTotal: {
     flexDirection: 'row',
@@ -1160,12 +1193,29 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
     color: '#666',
   },
-  priceContainer: {
+  priceInfo: {
+    marginTop: 8,
+    flexDirection: 'column',
     alignItems: 'flex-end',
   },
-  unitPrice: {
-    fontSize: 13,
+  unitPriceText: {
+    fontSize: 14,
     color: '#666',
-    marginBottom: 2,
+  },
+  totalInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    padding: 4,
+    minWidth: 80,
+    fontSize: 16,
+  },
+  totalDisplay: {
+    padding: 4,
+  },
+  totalText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
   },
 });
