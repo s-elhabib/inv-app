@@ -572,16 +572,41 @@ export default function ClientProductSelectionScreen() {
       />
       
       {selectedProducts.length > 0 && (
-        <TouchableOpacity 
-          style={styles.checkoutButton}
-          onPress={() => setShowConfirmModal(true)}
-        >
-          <ShoppingCart size={20} color="#fff" />
-          <Text style={styles.checkoutButtonText}>
-            Checkout ({selectedProducts.reduce((sum, p) => sum + p.quantity, 0)} items)
-          </Text>
-          <Text style={styles.checkoutAmount}>{formatCurrency(totalAmount)}</Text>
-        </TouchableOpacity>
+        <View style={styles.checkoutContainer}>
+          <TouchableOpacity 
+            style={styles.clearCartButton}
+            onPress={() => {
+              Alert.alert(
+                'Clear Cart',
+                'Are you sure you want to remove all items?',
+                [
+                  {
+                    text: 'Cancel',
+                    style: 'cancel',
+                  },
+                  {
+                    text: 'Clear',
+                    style: 'destructive',
+                    onPress: () => setSelectedProducts([])
+                  },
+                ]
+              );
+            }}
+          >
+            <X size={20} color="#F44336" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.checkoutButton}
+            onPress={() => setShowConfirmModal(true)}
+          >
+            <ShoppingCart size={20} color="#fff" />
+            <Text style={styles.checkoutButtonText}>
+              Checkout ({selectedProducts.reduce((sum, p) => sum + p.quantity, 0)} items)
+            </Text>
+            <Text style={styles.checkoutAmount}>{formatCurrency(totalAmount)}</Text>
+          </TouchableOpacity>
+        </View>
       )}
       
       <Modal
@@ -752,14 +777,37 @@ const styles = StyleSheet.create({
     minWidth: 20,
     textAlign: 'center',
   },
+  checkoutContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    gap: 10,
+  },
+  clearCartButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
   checkoutButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#F47B20',
     padding: 15,
-    margin: 10,
     borderRadius: 8,
+    elevation: 2,
   },
   checkoutButtonText: {
     color: '#fff',
