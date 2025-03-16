@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image } from "react-native"
-import { Search, Plus, Edit2, Trash2, Filter, Mail, Phone } from "lucide-react-native"
+import { Search, Plus, Edit2, Trash2, Filter, Mail, Phone, ShoppingBag } from "lucide-react-native"
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
+import { useNavigation } from "@react-navigation/native"
 
 // Define the Client type
 interface Client {
@@ -70,6 +71,15 @@ export default function ClientsScreen() {
   const handleDeleteClient = (id) => {
     setClients(clients.filter((client) => client.id !== id))
   }
+
+  const navigation = useNavigation();
+
+  const handleSelectProducts = (client) => {
+    navigation.navigate('ClientProductSelection', {
+      clientId: client.id,
+      clientName: client.name
+    });
+  };
 
   return (
     <View style={styles.container}>
@@ -150,6 +160,12 @@ export default function ClientsScreen() {
                   </View>
                 </View>
                 <View style={styles.clientActions}>
+                  <TouchableOpacity 
+                    style={styles.selectProductsButton}
+                    onPress={() => handleSelectProducts(client)}
+                  >
+                    <ShoppingBag size={16} color="#4CAF50" />
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.editButton}>
                     <Edit2 size={16} color="#F47B20" />
                   </TouchableOpacity>
@@ -317,6 +333,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingLeft: 10,
+  },
+  selectProductsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e8f5e9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   editButton: {
     width: 36,

@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, FlatList } from "react-native"
 import { LineChart, PieChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
-import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp } from "lucide-react-native"
+import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X } from "lucide-react-native"
 import { useState, useEffect, useCallback } from "react"
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
@@ -25,11 +25,73 @@ export default function DashboardScreen() {
     topClients: []
   })
 
+  // Add these new state variables
+  const [selectedClient, setSelectedClient] = useState(null)
+  const [showClientSelector, setShowClientSelector] = useState(false)
+  const [clientList, setClientList] = useState([])
+  const [clientOrders, setClientOrders] = useState([])
+  const [loadingClientData, setLoadingClientData] = useState(false)
+
   useFocusEffect(
     useCallback(() => {
-      fetchDashboardData()
+      fetchDashboardData();
+      fetchClients(); // Add this line
     }, [])
   )
+
+  // Add this function to fetch clients
+  const fetchClients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, name')
+        .order('name');
+      
+      if (error) throw error;
+      setClientList(data || []);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  // Add this function to fetch client orders
+  const fetchClientOrders = async (clientId) => {
+    if (!clientId) return;
+    
+    setLoadingClientData(true);
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          total_amount,
+          status,
+          created_at,
+          sales(
+            id,
+            quantity,
+            amount,
+            products:product_id(id, name, sellingPrice)
+          )
+        `)
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setClientOrders(data || []);
+    } catch (error) {
+      console.error('Error fetching client orders:', error);
+    } finally {
+      setLoadingClientData(false);
+    }
+  };
+
+  // Add this effect to fetch orders when client changes
+  useEffect(() => {
+    if (selectedClient) {
+      fetchClientOrders(selectedClient.id);
+    }
+  }, [selectedClient]);
 
   const fetchDashboardData = async () => {
     setLoading(true)
@@ -247,6 +309,18 @@ export default function DashboardScreen() {
     )
   }
 
+  // Format date function
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.pageTitle}>Admin Dashboard</Text>
@@ -461,6 +535,104 @@ export default function DashboardScreen() {
           </View>
         </View>
       </View>
+
+      {/* Add Client Order History Section */}
+      <View style={styles.sectionContainer}>
+        <Text style={styles.sectionTitle}>Client Order History</Text>
+        
+        <TouchableOpacity 
+          style={styles.clientSelector}
+          onPress={() => setShowClientSelector(true)}
+        >
+          <Text style={styles.clientSelectorText}>
+            {selectedClient ? selectedClient.name : 'Select a client'}
+          </Text>
+          <ChevronDown size={20} color="#666" />
+        </TouchableOpacity>
+        
+        {selectedClient ? (
+          loadingClientData ? (
+            <ActivityIndicator size="large" color="#F47B20" style={styles.loader} />
+          ) : clientOrders.length > 0 ? (
+            <View style={styles.ordersList}>
+              {clientOrders.map(order => (
+                <View key={order.id} style={styles.orderCard}>
+                  <View style={styles.orderHeader}>
+                    <Text style={styles.orderDate}>{formatDate(order.created_at)}</Text>
+                    <Text style={styles.orderAmount}>${order.total_amount}</Text>
+                  </View>
+                  
+                  <View style={styles.orderProducts}>
+                    {order.sales.map(sale => (
+                      <View key={sale.id} style={styles.productItem}>
+                        <Text style={styles.productName}>{sale.products.name}</Text>
+                        <View style={styles.productDetails}>
+                          <Text style={styles.productQuantity}>x{sale.quantity}</Text>
+                          <Text style={styles.productPrice}>${sale.amount}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                  
+                  <View style={styles.orderFooter}>
+                    <Text style={[
+                      styles.orderStatus,
+                      order.status === 'completed' ? styles.statusCompleted : styles.statusPending
+                    ]}>
+                      {order.status.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>No orders found for this client</Text>
+          )
+        ) : (
+          <Text style={styles.emptyText}>Select a client to view their order history</Text>
+        )}
+      </View>
+      
+      {/* Client Selector Modal */}
+      <Modal
+        visible={showClientSelector}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowClientSelector(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Client</Text>
+              <TouchableOpacity onPress={() => setShowClientSelector(false)}>
+                <X size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <FlatList
+              data={clientList}
+              keyExtractor={item => item.id.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.clientItem}
+                  onPress={() => {
+                    setSelectedClient(item);
+                    setShowClientSelector(false);
+                  }}
+                >
+                  <Text style={styles.clientItemText}>{item.name}</Text>
+                  {selectedClient && selectedClient.id === item.id && (
+                    <ShoppingBag size={20} color="#F47B20" />
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>No clients found</Text>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   )
 }
@@ -589,5 +761,166 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#666',
   },
-})
-
+  // New styles for client order history
+  sectionContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#333',
+  },
+  clientSelector: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  clientSelectorText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  ordersList: {
+    marginTop: 8,
+  },
+  orderCard: {
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 8,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  orderDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  orderAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#F47B20',
+  },
+  orderProducts: {
+    padding: 12,
+  },
+  productItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  productName: {
+    fontSize: 15,
+    color: '#333',
+    flex: 1,
+  },
+  productDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  productQuantity: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 12,
+  },
+  productPrice: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#333',
+    width: 70,
+    textAlign: 'right',
+  },
+  orderFooter: {
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    alignItems: 'flex-end',
+  },
+  orderStatus: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+  },
+  statusCompleted: {
+    backgroundColor: '#e6f7ed',
+    color: '#4CAF50',
+  },
+  statusPending: {
+    backgroundColor: '#fff8e6',
+    color: '#FFC107',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#999',
+    padding: 20,
+  },
+  loader: {
+    marginVertical: 20,
+  },
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  clientItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  clientItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+});

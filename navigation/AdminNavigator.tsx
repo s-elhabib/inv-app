@@ -1,10 +1,11 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
-import { Home, BarChart2, ShoppingBag, Settings, History } from "lucide-react-native"
+import { Home, BarChart2, ShoppingBag, Settings, History, Users } from "lucide-react-native"
 import DashboardScreen from "../screens/admin/DashboardScreen"
 import AnalyticsScreen from "../screens/admin/AnalyticsScreen"
 import InventoryScreen from "../screens/admin/InventoryScreen"
 import SalesHistoryScreen from "../screens/admin/SalesHistoryScreen"
 import SettingsStack from "./SettingsStack"
+import ClientProductSelectionScreen from "../screens/client/ClientProductSelectionScreen"
 
 const Tab = createBottomTabNavigator()
 
@@ -63,6 +64,22 @@ export default function AdminNavigator() {
         options={{
           tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
         }}
+      />
+      <Tab.Screen 
+        name="ClientProductSelection" 
+        component={ClientProductSelectionScreen}
+        options={({ route }) => ({ 
+          title: `Select Products for ${route.params?.clientName || 'Client'}`,
+          headerStyle: {
+            backgroundColor: "#fff",
+          },
+          headerTintColor: "#F47B20",
+          headerTitleStyle: {
+            fontWeight: "bold",
+          },
+          tabBarIcon: ({ color }) => <Users size={24} color={color} />,
+          tabBarLabel: "Client Orders"
+        })}
       />
     </Tab.Navigator>
   )
