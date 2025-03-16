@@ -50,10 +50,7 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.logoContainer}>
-        <View style={[styles.logo, { backgroundColor: '#ccc', justifyContent: 'center', alignItems: 'center' }]}>
-          <Text>Logo</Text>
-        </View>
-        <Text style={styles.title}>Restaurant Management</Text>
+        <Text style={styles.title}>Inventory Management</Text>
       </View>
 
       <View style={styles.formContainer}>
