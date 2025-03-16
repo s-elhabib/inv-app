@@ -1,0 +1,10 @@
+android {
+    ...
+    defaultConfig {
+        ...
+        manifestPlaceholders = [
+            ...
+            applicationName: "Your App Name"
+        ]
+    }
+}

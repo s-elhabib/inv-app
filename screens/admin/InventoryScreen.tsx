@@ -612,10 +612,10 @@ export default function InventoryScreen() {
           ))}
         </ScrollView>
 
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
+        {/* <TouchableOpacity style={styles.addButton} onPress={() => setShowAddModal(true)}>
           <Plus size={20} color="white" />
           <Text style={styles.addButtonText}>Add Product</Text>
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </View>
 
       {loading ? (
@@ -669,6 +669,14 @@ export default function InventoryScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Add FAB here, before the modals */}
+      <TouchableOpacity 
+        style={styles.fab}
+        onPress={() => setShowAddModal(true)}
+      >
+        <Plus size={24} color="white" />
+      </TouchableOpacity>
 
       {/* Add Product Modal */}
       <Modal
@@ -1052,6 +1060,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
+    position: 'relative',
   },
   header: {
     flexDirection: "row",
@@ -1464,4 +1473,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   // Removed salesHistoryButton and salesHistoryButtonText styles
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    backgroundColor: '#F47B20',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    zIndex: 999,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.30,
+    shadowRadius: 4.65,
+  },
 });

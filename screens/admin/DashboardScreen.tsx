@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, FlatList, TextInput } from "react-native"
 import { LineChart, PieChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
-import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X, Search, Edit2 } from "lucide-react-native"
+import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X, Search, Edit2, Package } from "lucide-react-native"
 import { useState, useEffect, useCallback } from "react"
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
@@ -22,7 +22,8 @@ export default function DashboardScreen() {
     monthlyRevenue: [0, 0, 0, 0, 0, 0],
     monthlyRevenueLabels: [],
     categorySales: [],
-    topClients: []
+    topClients: [],
+    totalInventoryValue: 0
   })
 
   // Add these new state variables
@@ -93,6 +94,29 @@ export default function DashboardScreen() {
     }
   }, [selectedClient]);
 
+  useEffect(() => {
+    // Subscribe to changes in the products table
+    const subscription = supabase
+      .channel('products_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'products'
+        },
+        (payload) => {
+          // Refresh dashboard data when products are modified
+          fetchDashboardData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
@@ -105,27 +129,45 @@ export default function DashboardScreen() {
         console.error("Client fetch error:", clientError)
         throw clientError
       }
-      
-      console.log("Fetched clients:", clients?.length || 0)
-      
+
       // Fetch product count
       const { data: products, error: productError } = await supabase
         .from('products')
-        .select('id, category_id, created_at')
+        .select('id, category_id, price, "sellingPrice", created_at')
       
-      if (productError) throw productError
+      if (productError) {
+        console.error("Product fetch error:", productError)
+        throw productError
+      }
 
       // Fetch sales data
       const { data: sales, error: salesError } = await supabase
         .from('sales')
-        .select('id, amount, product_id, created_at')
+        .select(`
+          id, 
+          amount,
+          product_id,
+          created_at,
+          products (
+            price,
+            "sellingPrice"
+          )
+        `)
       
-      if (salesError) throw salesError
+      if (salesError) {
+        console.error("Sales fetch error:", salesError)
+        throw salesError
+      }
 
-      // Calculate total revenue
-      const totalRevenue = sales ? sales.reduce((sum, sale) => sum + (sale.amount || 0), 0) : 0
-      
-      // Calculate monthly revenue (last 6 months)
+      // Calculate total revenue - convert decimal strings to numbers
+      const totalRevenue = sales ? sales.reduce((sum, sale) => {
+        const amount = parseFloat(sale.amount) || 0
+        return sum + amount
+      }, 0) : 0
+
+      console.log("Total revenue calculated:", totalRevenue)
+
+      // Calculate monthly revenue
       const { data: monthlyRevenueData, labels: monthlyRevenueLabels } = calculateMonthlyRevenue(sales || [])
       
       // Calculate category sales
@@ -134,10 +176,10 @@ export default function DashboardScreen() {
       // Calculate growth percentages
       const clientGrowth = calculateGrowth(clients || [], 'created_at')
       const productGrowth = calculateGrowth(products || [], 'created_at')
-      const revenueGrowth = 15 // Placeholder - replace with actual calculation
-      const salesGrowth = sales ? (sales.length > 0 ? -3 : 0) : 0 // Placeholder
+      const revenueGrowth = 15 // You can implement proper calculation
+      const salesGrowth = calculateSalesGrowth(sales || [])
 
-      // Fetch sales with client information
+      // Fetch sales with client information for top clients
       const { data: salesWithClients, error: salesClientError } = await supabase
         .from('sales')
         .select(`
@@ -155,10 +197,11 @@ export default function DashboardScreen() {
         if (sale.clients && sale.clients.id) {
           const clientId = sale.clients.id
           const clientName = sale.clients.name
+          const amount = parseFloat(sale.amount) || 0
           if (!clientRevenue[clientId]) {
             clientRevenue[clientId] = { id: clientId, name: clientName, total: 0 }
           }
-          clientRevenue[clientId].total += (sale.amount || 0)
+          clientRevenue[clientId].total += amount
         }
       })
 
@@ -166,6 +209,17 @@ export default function DashboardScreen() {
       const topClients = Object.values(clientRevenue)
         .sort((a, b) => b.total - a.total)
         .slice(0, 4)
+
+      // Fetch products with their cost price and stock
+      const { data: productsWithStock, error: productsError } = await supabase
+        .from('products')
+        .select('id, price, stock') // Changed costPrice to price
+      
+      if (productsError) throw productsError
+
+      // Calculate total inventory value using price instead of costPrice
+      const totalInventoryValue = productsWithStock?.reduce((sum, product) => 
+        sum + (product.price * product.stock), 0) || 0
 
       setDashboardData({
         clientCount: clients?.length || 0,
@@ -179,8 +233,17 @@ export default function DashboardScreen() {
         monthlyRevenue: monthlyRevenueData,
         monthlyRevenueLabels,
         categorySales,
-        topClients
+        topClients,
+        totalInventoryValue // This will now use price instead of costPrice
       })
+
+      console.log("Dashboard data set:", {
+        clientCount: clients?.length || 0,
+        productCount: products?.length || 0,
+        totalRevenue,
+        totalSales: sales?.length || 0
+      })
+
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
     } finally {
@@ -192,34 +255,24 @@ export default function DashboardScreen() {
     const months = Array(6).fill(0)
     const now = new Date()
     
-    // Create array of month labels (last 6 months)
     const monthNames = []
     for (let i = 5; i >= 0; i--) {
       const d = new Date()
       d.setMonth(now.getMonth() - i)
-      // Add to the end of the array, not the beginning
       monthNames.push(d.toLocaleString('default', { month: 'short' }))
     }
     
-    console.log("Current month:", now.toLocaleString('default', { month: 'long' }))
-    console.log("Month labels:", monthNames)
-    
     sales.forEach(sale => {
       const saleDate = new Date(sale.created_at)
-      console.log("Sale date:", sale.created_at, "parsed as:", saleDate.toISOString())
-      
       const monthDiff = (now.getMonth() - saleDate.getMonth()) + 
-                        (now.getFullYear() - saleDate.getFullYear()) * 12
-      
-      console.log("Month diff:", monthDiff, "Index:", 5 - monthDiff)
+                       (now.getFullYear() - saleDate.getFullYear()) * 12
       
       if (monthDiff >= 0 && monthDiff < 6) {
-        // This is correct - most recent month (diff=0) goes to index 5
-        months[5 - monthDiff] += (sale.amount || 0)
+        const amount = parseFloat(sale.amount) || 0
+        months[5 - monthDiff] += amount
       }
     })
     
-    console.log("Final monthly data:", months)
     return { data: months, labels: monthNames }
   }
 
@@ -291,12 +344,44 @@ export default function DashboardScreen() {
     return Math.round(((currentPeriodItems.length - previousPeriodItems.length) / previousPeriodItems.length) * 100)
   }
 
+  const calculateSalesGrowth = (sales) => {
+    try {
+      const now = new Date();
+      const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
+
+      // Filter sales for current and previous month
+      const currentMonthSales = sales.filter(sale => {
+        const saleDate = new Date(sale.created_at);
+        return saleDate >= oneMonthAgo && saleDate <= now;
+      });
+
+      const previousMonthSales = sales.filter(sale => {
+        const saleDate = new Date(sale.created_at);
+        return saleDate >= twoMonthsAgo && saleDate < oneMonthAgo;
+      });
+
+      // Calculate total sales for each period
+      const currentTotal = currentMonthSales.length;
+      const previousTotal = previousMonthSales.length;
+
+      // Calculate growth percentage
+      if (previousTotal === 0) return currentTotal > 0 ? 100 : 0;
+      
+      const growth = ((currentTotal - previousTotal) / previousTotal) * 100;
+      return Math.round(growth);
+    } catch (error) {
+      console.error("Error calculating sales growth:", error);
+      return 0;
+    }
+  };
+
   const formatCurrency = (amount) => {
-    if (amount >= 1) {
-      return `${amount.toLocaleString('en-US', { maximumFractionDigits: 1 })}k MAD`
+    const value = parseFloat(amount)
+    if (value >= 1000) {
+      return `${(value / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })}k MAD`
     } else {
-      // For values less than 1k, show the actual value without 'k'
-      return `${(amount * 1000).toLocaleString('en-US')} MAD`
+      return `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} MAD`
     }
   }
 
@@ -379,7 +464,7 @@ export default function DashboardScreen() {
             <View style={styles.statsIconContainer}>
               <DollarSign size={20} color="#F47B20" />
             </View>
-            <Text style={styles.statsValue}>{formatCurrency(dashboardData.totalRevenue/1000)}</Text>
+            <Text style={styles.statsValue}>{formatCurrency(dashboardData.totalRevenue)}</Text>
             <Text style={styles.statsLabel}>Total Revenue</Text>
             <View style={[
               styles.statsChange,
@@ -419,6 +504,16 @@ export default function DashboardScreen() {
                 {dashboardData.salesGrowth >= 0 ? '+' : ''}{dashboardData.salesGrowth}%
               </Text>
             </View>
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={[styles.statsCard, styles.fullWidthCard]}>
+            <View style={styles.statsIconContainer}>
+              <Package size={20} color="#F47B20" />
+            </View>
+            <Text style={styles.statsValue}>{formatCurrency(dashboardData.totalInventoryValue)}</Text>
+            <Text style={styles.statsLabel}>Total Inventory Value</Text>
           </View>
         </View>
       </View>
@@ -526,7 +621,7 @@ export default function DashboardScreen() {
               dashboardData.topClients.map(client => (
                 <View key={client.id} style={styles.clientItem}>
                   <Text style={styles.clientName}>{client.name}</Text>
-                  <Text style={styles.clientValue}>{formatCurrency(client.total/1000)}</Text>
+                  <Text style={styles.clientValue}>{formatCurrency(client.total)}</Text>
                 </View>
               ))
             ) : (
@@ -922,5 +1017,9 @@ const styles = StyleSheet.create({
   clientItemText: {
     fontSize: 16,
     color: '#333',
+  },
+  fullWidthCard: {
+    flex: 1,
+    marginHorizontal: 20,
   },
 });

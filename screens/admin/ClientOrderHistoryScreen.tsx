@@ -11,9 +11,10 @@ import {
   Alert
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { Search, Calendar, ChevronDown, X } from 'lucide-react-native';
+import { Search, Calendar, ChevronDown, X, Share as ShareIcon } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { Calendar as RNCalendar } from 'react-native-calendars';
+import { generateAndShareInvoice } from '../../utils/invoiceGenerator';
 
 export default function ClientOrderHistoryScreen() {
   const isFocused = useIsFocused();
@@ -414,6 +415,12 @@ export default function ClientOrderHistoryScreen() {
                       </Text>
                     </View>
                     <View style={styles.orderHeaderRight}>
+                      <TouchableOpacity 
+                        style={styles.shareButton}
+                        onPress={() => generateAndShareInvoice(item)}
+                      >
+                        <ShareIcon size={18} color="#F47B20" />
+                      </TouchableOpacity>
                       <Text style={styles.orderAmount}>
                         {formatCurrency(item.total_amount)}
                       </Text>
@@ -737,5 +744,9 @@ const styles = StyleSheet.create({
     color: '#666',
     fontSize: 14,
     textAlign: 'center',
+  },
+  shareButton: {
+    padding: 8,
+    marginRight: 10,
   },
 });

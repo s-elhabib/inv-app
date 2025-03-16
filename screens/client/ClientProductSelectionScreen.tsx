@@ -8,11 +8,13 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Modal
+  Modal,
+  RefreshControl
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { Search, Plus, Minus, ShoppingCart, Check, X, ChevronDown } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { generateAndShareInvoice } from '../../utils/invoiceGenerator';
 
 const formatCurrency = (amount: number) => {
   return `${amount.toFixed(2)} MAD`;
@@ -85,11 +87,24 @@ export default function ClientProductSelectionScreen() {
       setLoading(true);
       const { data, error } = await supabase
         .from('products')
-        .select('*')
+        .select(`
+          id,
+          name,
+          price,
+          sellingPrice,
+          stock,
+          category_id,
+          categories(name)
+        `)
         .gt('stock', 0) // Only show products with stock > 0
         .order('name');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching products:', error);
+        throw error;
+      }
+      
+      console.log('Fetched products:', data?.length); // Debug log
       setProducts(data || []);
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -98,6 +113,22 @@ export default function ClientProductSelectionScreen() {
       setLoading(false);
     }
   };
+
+  // Add a refresh listener when the screen gains focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchProducts();
+      fetchClients();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchProducts();
+    fetchClients();
+  }, []);
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -204,11 +235,52 @@ export default function ClientProductSelectionScreen() {
         
       if (clientError) throw clientError;
       
+      // After successful order creation:
+      const { data: orderWithDetails, error: orderDetailsError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          created_at,
+          total_amount,
+          sales (
+            id,
+            quantity,
+            amount,
+            products (
+              name,
+              sellingPrice
+            )
+          ),
+          clients (
+            name,
+            phone
+          )
+        `)
+        .eq('id', orderId)
+        .single();
+
+      if (orderDetailsError) throw orderDetailsError;
+
       Alert.alert(
         'Success', 
-        'Order completed successfully', 
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        'Order completed successfully. Would you like to share the invoice?',
+        [
+          {
+            text: 'Share via WhatsApp',
+            onPress: () => generateAndShareInvoice(orderWithDetails, true)
+          },
+          {
+            text: 'Share',
+            onPress: () => generateAndShareInvoice(orderWithDetails)
+          },
+          {
+            text: 'Close',
+            style: 'cancel'
+          }
+        ]
       );
+
+      navigation.goBack();
     } catch (error) {
       console.error('Error processing order:', error);
       Alert.alert('Error', 'Failed to process order');
@@ -350,6 +422,9 @@ export default function ClientProductSelectionScreen() {
                 <Text style={styles.productName}>{item.name}</Text>
                 <Text style={styles.productPrice}>{formatCurrency(item.sellingPrice)}</Text>
                 <Text style={styles.productStock}>In stock: {item.stock}</Text>
+                {item.categories && (
+                  <Text style={styles.productCategory}>{item.categories.name}</Text>
+                )}
               </View>
               
               <View style={styles.quantityControls}>
@@ -377,6 +452,18 @@ export default function ClientProductSelectionScreen() {
             </View>
           );
         }}
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'No matching products found' : 'No products available'}
+          </Text>
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={fetchProducts}
+            colors={["#F47B20"]}
+          />
+        }
       />
       
       {selectedProducts.length > 0 && (
@@ -553,6 +640,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   productStock: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  productCategory: {
     fontSize: 12,
     color: '#666',
     marginTop: 2,
