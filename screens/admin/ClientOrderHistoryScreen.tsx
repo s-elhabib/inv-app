@@ -7,13 +7,13 @@ import {
   TouchableOpacity, 
   ActivityIndicator, 
   TextInput,
-  Platform,
-  Modal 
+  Modal,
+  Alert
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { Search, Calendar, ChevronDown, X } from 'lucide-react-native';
 import { useIsFocused } from '@react-navigation/native';
-import { Picker } from '@react-native-picker/picker';
+import { Calendar as RNCalendar } from 'react-native-calendars';
 
 export default function ClientOrderHistoryScreen() {
   const isFocused = useIsFocused();
@@ -27,19 +27,13 @@ export default function ClientOrderHistoryScreen() {
   const [expandedOrders, setExpandedOrders] = useState<string[]>([]);
   
   // Date filter states
-  const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 1);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  });
-  const [endDate, setEndDate] = useState(() => {
-    const date = new Date();
-    date.setHours(23, 59, 59, 999);
-    return date;
-  });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [datePickerType, setDatePickerType] = useState('start'); // 'start' or 'end'
+  const [isFilterActive, setIsFilterActive] = useState(false);
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectingDate, setSelectingDate] = useState('start'); // 'start' or 'end'
+  const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
+  const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
 
   const toggleOrderExpansion = (orderId: string) => {
     setExpandedOrders(prev => 
@@ -49,47 +43,101 @@ export default function ClientOrderHistoryScreen() {
     );
   };
 
-  // Generate date options for the picker
-  const generateDateOptions = () => {
-    const dates = [];
-    const currentDate = new Date();
-    for (let i = 0; i < 365; i++) {
-      const date = new Date();
-      date.setDate(currentDate.getDate() - i);
-      dates.push(date);
-    }
-    return dates;
-  };
-
-  const dateOptions = generateDateOptions();
-
-  const openDatePicker = (type) => {
-    setDatePickerType(type);
-    setShowDatePicker(true);
-  };
-
-  const handleDateSelect = (date) => {
-    const selectedDate = new Date(date);
-    if (datePickerType === 'start') {
+  const handleDateSelect = (day) => {
+    const selectedDate = new Date(day.timestamp);
+    
+    if (selectingDate === 'start') {
       selectedDate.setHours(0, 0, 0, 0);
-      setStartDate(selectedDate);
+      setTempStartDate(selectedDate);
+      
+      // If end date exists and is before new start date, clear it
+      if (tempEndDate && tempEndDate < selectedDate) {
+        setTempEndDate(null);
+      }
     } else {
       selectedDate.setHours(23, 59, 59, 999);
-      setEndDate(selectedDate);
+      if (tempStartDate && selectedDate < tempStartDate) {
+        Alert.alert('Invalid Date Range', 'End date cannot be before start date');
+        return;
+      }
+      setTempEndDate(selectedDate);
     }
-    setShowDatePicker(false);
+    
+    setShowCalendar(false);
+  };
+
+  const openCalendar = (type) => {
+    setSelectingDate(type);
+    setShowCalendar(true);
+  };
+
+  const applyDateFilter = async () => {
+    if (!tempStartDate || !tempEndDate || !selectedClient) {
+      Alert.alert('Error', 'Please select both start and end dates');
+      return;
+    }
+
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+    setIsFilterActive(true);
+    setLoadingClientData(true);
+    setClientOrders([]); // Clear existing orders
+
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          total_amount,
+          status,
+          created_at,
+          sales(
+            id,
+            quantity,
+            amount,
+            products:product_id(id, name, sellingPrice)
+          )
+        `)
+        .eq('client_id', selectedClient.id)
+        .gte('created_at', new Date(tempStartDate.setHours(0, 0, 0, 0)).toISOString())
+        .lte('created_at', new Date(tempEndDate.setHours(23, 59, 59, 999)).toISOString())
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setClientOrders(data || []);
+    } catch (error) {
+      console.error('Error fetching filtered orders:', error);
+      Alert.alert('Error', 'Failed to fetch orders');
+    } finally {
+      setLoadingClientData(false);
+    }
+  };
+
+  const resetDateFilter = async () => {
+    setIsFilterActive(false);
+    setStartDate(null);
+    setEndDate(null);
+    setTempStartDate(null);
+    setTempEndDate(null);
     
     if (selectedClient) {
-      fetchClientOrders(selectedClient.id);
+      console.log('Resetting date filter');
+      await fetchClientOrders(selectedClient.id, true);
     }
   };
 
   const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    if (!date) return '';
+    
+    // Ensure we're working with a Date object
+    const d = new Date(date);
+    
+    // Get day, month, and year
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0'); // Months are 0-based
+    const year = d.getFullYear();
+    
+    return `${day}/${month}/${year}`;
   };
 
   const formatCurrency = (amount: number) => {
@@ -116,18 +164,14 @@ export default function ClientOrderHistoryScreen() {
     }
   };
 
-  const fetchClientOrders = async (clientId) => {
+  const fetchClientOrders = async (clientId, isReset = false) => {
     if (!clientId) return;
     
     setLoadingClientData(true);
+    setClientOrders([]); // Clear existing orders before fetching new ones
+    
     try {
-      console.log('Fetching orders for client:', clientId);
-      console.log('Date range:', {
-        start: startDate.toISOString(),
-        end: new Date(endDate.setHours(23, 59, 59, 999)).toISOString()
-      });
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders')
         .select(`
           id,
@@ -142,19 +186,30 @@ export default function ClientOrderHistoryScreen() {
           )
         `)
         .eq('client_id', clientId)
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', new Date(endDate.setHours(23, 59, 59, 999)).toISOString())
         .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error('Error in fetchClientOrders:', error);
-        throw error;
+
+      if (!isReset && startDate && endDate) {
+        const startDateTime = new Date(startDate);
+        startDateTime.setHours(0, 0, 0, 0);
+        const startDateISO = startDateTime.toISOString();
+
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(23, 59, 59, 999);
+        const endDateISO = endDateTime.toISOString();
+        
+        query = query
+          .gte('created_at', startDateISO)
+          .lte('created_at', endDateISO);
       }
 
-      console.log('Fetched orders:', data?.length || 0);
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
       setClientOrders(data || []);
     } catch (error) {
       console.error('Error fetching client orders:', error);
+      Alert.alert('Error', 'Failed to fetch orders');
     } finally {
       setLoadingClientData(false);
     }
@@ -232,63 +287,99 @@ export default function ClientOrderHistoryScreen() {
         )}
 
         {/* Date Filter Section */}
-        {selectedClient && (
-          <View style={styles.dateFilterContainer}>
+        <View style={styles.dateFilterContainer}>
+          <View style={styles.dateSelectionGroup}>
             <TouchableOpacity 
-              style={styles.dateButton}
-              onPress={() => openDatePicker('start')}
+              style={[styles.dateButton, tempStartDate && styles.activeDateButton]}
+              onPress={() => openCalendar('start')}
             >
               <Calendar size={16} color="#666" />
-              <Text style={styles.dateButtonText}>
-                {formatDate(startDate)}
+              <Text style={[styles.dateButtonText, tempStartDate && styles.activeDateButtonText]}>
+                {tempStartDate ? formatDate(tempStartDate) : 'Start Date'}
               </Text>
             </TouchableOpacity>
 
             <Text style={styles.dateSeperator}>to</Text>
 
             <TouchableOpacity 
-              style={styles.dateButton}
-              onPress={() => openDatePicker('end')}
+              style={[styles.dateButton, tempEndDate && styles.activeDateButton]}
+              onPress={() => openCalendar('end')}
             >
               <Calendar size={16} color="#666" />
-              <Text style={styles.dateButtonText}>
-                {formatDate(endDate)}
+              <Text style={[styles.dateButtonText, tempEndDate && styles.activeDateButtonText]}>
+                {tempEndDate ? formatDate(tempEndDate) : 'End Date'}
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[
+                styles.applyButton,
+                (!tempStartDate || !tempEndDate) && styles.applyButtonDisabled
+              ]}
+              onPress={applyDateFilter}
+              disabled={!tempStartDate || !tempEndDate}
+            >
+              <Text style={styles.applyButtonText}>Apply</Text>
+            </TouchableOpacity>
+          </View>
+
+          {isFilterActive && (
+            <TouchableOpacity 
+              style={styles.resetButton}
+              onPress={resetDateFilter}
+            >
+              <X size={16} color="#fff" />
+              <Text style={styles.resetButtonText}>Reset</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter Status Indicator */}
+        {selectedClient && isFilterActive && startDate && endDate && (
+          <View style={styles.filterStatusContainer}>
+            <Text style={styles.filterStatusText}>
+              Showing orders from {formatDate(startDate)} to {formatDate(endDate)}
+            </Text>
           </View>
         )}
 
-        {/* Custom Date Picker Modal */}
+        {/* Calendar Modal */}
         <Modal
-          visible={showDatePicker}
+          visible={showCalendar}
           transparent={true}
           animationType="slide"
         >
           <View style={styles.modalContainer}>
-            <View style={styles.pickerContainer}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>
-                  Select {datePickerType === 'start' ? 'Start' : 'End'} Date
+            <View style={styles.calendarContainer}>
+              <View style={styles.calendarHeader}>
+                <Text style={styles.calendarTitle}>
+                  Select {selectingDate === 'start' ? 'Start' : 'End'} Date
                 </Text>
                 <TouchableOpacity 
                   style={styles.closeButton}
-                  onPress={() => setShowDatePicker(false)}
+                  onPress={() => setShowCalendar(false)}
                 >
-                  <Text style={styles.closeButtonText}>Done</Text>
+                  <X size={24} color="#666" />
                 </TouchableOpacity>
               </View>
-              <Picker
-                selectedValue={datePickerType === 'start' ? startDate.toISOString() : endDate.toISOString()}
-                onValueChange={(itemValue) => handleDateSelect(itemValue)}
-              >
-                {dateOptions.map((date) => (
-                  <Picker.Item 
-                    key={date.toISOString()} 
-                    label={formatDate(date)} 
-                    value={date.toISOString()} 
-                  />
-                ))}
-              </Picker>
+              
+              <RNCalendar
+                onDayPress={handleDateSelect}
+                markedDates={{
+                  [selectingDate === 'start' 
+                    ? tempStartDate?.toISOString().split('T')[0] 
+                    : tempEndDate?.toISOString().split('T')[0]]: {
+                    selected: true,
+                    selectedColor: '#F47B20'
+                  }
+                }}
+                maxDate={new Date().toISOString().split('T')[0]}
+                theme={{
+                  selectedDayBackgroundColor: '#F47B20',
+                  todayTextColor: '#F47B20',
+                  arrowColor: '#F47B20',
+                }}
+              />
             </View>
           </View>
         </Modal>
@@ -319,7 +410,7 @@ export default function ClientOrderHistoryScreen() {
                         ]}
                       />
                       <Text style={styles.orderDate}>
-                        {new Date(item.created_at).toLocaleDateString()}
+                        {formatDate(item.created_at)}
                       </Text>
                     </View>
                     <View style={styles.orderHeaderRight}>
@@ -408,9 +499,13 @@ const styles = StyleSheet.create({
     right: 10,
   },
   dateFilterContainer: {
+    padding: 10,
+    gap: 10,
+  },
+  dateSelectionGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   dateButton: {
     flexDirection: 'row',
@@ -418,47 +513,79 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: 8,
     borderRadius: 8,
-    gap: 8,
+    gap: 5,
+    flex: 1,
+  },
+  activeDateButton: {
+    backgroundColor: '#FFF3E9',
+    borderColor: '#F47B20',
+    borderWidth: 1,
   },
   dateButtonText: {
+    color: '#666',
     fontSize: 14,
-    color: '#333',
+    flex: 1,
+  },
+  activeDateButtonText: {
+    color: '#F47B20',
   },
   dateSeperator: {
-    fontSize: 14,
     color: '#666',
+    fontSize: 14,
+  },
+  applyButton: {
+    backgroundColor: '#F47B20',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  applyButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  applyButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#666',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    gap: 4,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontWeight: '500',
   },
   modalContainer: {
     flex: 1,
-    justifyContent: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  pickerContainer: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+  calendarContainer: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
   },
-  pickerHeader: {
+  calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e1e1e1',
+    marginBottom: 20,
   },
-  pickerTitle: {
+  calendarTitle: {
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: 'bold',
     color: '#333',
   },
   closeButton: {
-    padding: 8,
-  },
-  closeButtonText: {
-    color: '#F47B20',
-    fontSize: 16,
-    fontWeight: '500',
+    padding: 5,
   },
   suggestionsContainer: {
     position: 'absolute',
@@ -598,5 +725,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#666',
     marginTop: 20,
+  },
+  filterStatusContainer: {
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    marginHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  filterStatusText: {
+    color: '#666',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
