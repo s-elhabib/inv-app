@@ -44,10 +44,16 @@ export default function ClientProductSelectionScreen() {
       const { data, error } = await supabase
         .from('clients')
         .select('id, name')
-        .eq('status', 'active')  // Only fetch active clients
+        .eq('status', 'active')  // Keep the active filter but ensure it matches the case
         .order('name');
       
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching clients:', error);
+        Alert.alert('Error', 'Failed to load clients');
+        return;
+      }
+      
+      console.log('Fetched clients:', data?.length);
       setClients(data || []);
       
       // If no client was pre-selected and we have clients, select the first one
@@ -61,6 +67,18 @@ export default function ClientProductSelectionScreen() {
       Alert.alert('Error', 'Failed to load clients');
     }
   };
+
+  const refreshClients = () => {
+    fetchClients();
+  };
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      refreshClients();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const fetchProducts = async () => {
     try {
@@ -279,7 +297,7 @@ export default function ClientProductSelectionScreen() {
             
             <FlatList
               data={clients.filter(client => 
-                client.name.toLowerCase().includes(clientSearchQuery.toLowerCase())
+                client.name.toLowerCase().includes(clientSearchQuery.toLowerCase().trim())
               )}
               keyExtractor={item => item.id.toString()}
               renderItem={({ item }) => (
@@ -290,6 +308,7 @@ export default function ClientProductSelectionScreen() {
                     setSelectedClientName(item.name);
                     setShowClientModal(false);
                     setSelectedProducts([]);
+                    setClientSearchQuery(''); // Clear search when selecting
                   }}
                 >
                   <Text style={styles.clientItemText}>{item.name}</Text>
@@ -299,7 +318,9 @@ export default function ClientProductSelectionScreen() {
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>No clients found</Text>
+                <Text style={styles.emptyText}>
+                  {clientSearchQuery ? 'No matching clients found' : 'No active clients available'}
+                </Text>
               }
             />
           </View>

@@ -20,7 +20,7 @@ export default function AddEditClientScreen({ route, navigation }) {
     email: '',
     phone: '',
     address: '',
-    status: 'active'
+    status: 'active' // Make sure this is lowercase to match the database
   });
   const [loading, setLoading] = useState(false);
 
@@ -93,11 +93,11 @@ export default function AddEditClientScreen({ route, navigation }) {
       } else {
         // Add new client
         const insertData = {
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          address: formData.address,
-          status: formData.status,
+          name: formData.name.trim(), // Add trim() to remove any whitespace
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          address: formData.address.trim(),
+          status: formData.status.toLowerCase(), // Ensure lowercase
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           revenue: 0
@@ -105,25 +105,22 @@ export default function AddEditClientScreen({ route, navigation }) {
 
         console.log('Insert payload:', insertData);
 
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('clients')
-          .insert(insertData);
+          .insert(insertData)
+          .select() // Add this to get the inserted data back
+          .single();
 
         if (error) {
           console.error('Error adding client:', error);
           throw new Error(`Database error: ${error.message}`);
         }
-        
-        // Success - navigate back and trigger refresh
-        Alert.alert('Success', 'Client added successfully', [
-          { 
-            text: 'OK', 
-            onPress: () => {
-              // Just navigate back and let the ManageClientsScreen handle the refresh
-              navigation.goBack();
-            }
-          }
-        ]);
+
+        // Success - navigate back with the new client data
+        navigation.navigate('ManageClients', {
+          newClient: data,
+          timestamp: new Date().getTime()
+        });
       }
     } catch (error) {
       console.error('Error saving client:', error.message);
