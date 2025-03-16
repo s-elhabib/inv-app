@@ -1,7 +1,6 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
-import { Home, BarChart2, ShoppingBag, Settings, Users, FileText } from "lucide-react-native"
+import { Home, ShoppingBag, Settings, Users, FileText } from "lucide-react-native"
 import DashboardScreen from "../screens/admin/DashboardScreen"
-import AnalyticsScreen from "../screens/admin/AnalyticsScreen"
 import InventoryScreen from "../screens/admin/InventoryScreen"
 import SettingsStack from "./SettingsStack"
 import ClientProductSelectionScreen from "../screens/client/ClientProductSelectionScreen"
@@ -37,27 +36,6 @@ export default function AdminNavigator() {
           tabBarIcon: ({ color }) => <Home size={24} color={color} />,
         }}
       />
-      <Tab.Screen
-        name="Analytics"
-        component={AnalyticsScreen}
-        options={{
-          tabBarIcon: ({ color }) => <BarChart2 size={24} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Inventory"
-        component={InventoryScreen}
-        options={{
-          tabBarIcon: ({ color }) => <ShoppingBag size={24} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsStack}
-        options={{
-          tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
-        }}
-      />
       <Tab.Screen 
         name="ClientProductSelection" 
         component={ClientProductSelectionScreen}
@@ -71,15 +49,22 @@ export default function AdminNavigator() {
             fontWeight: "bold",
           },
           tabBarIcon: ({ color }) => <Users size={24} color={color} />,
-          tabBarLabel: "Client Orders"
+          tabBarLabel: "New Order"
         })}
+      />
+      <Tab.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{
+          tabBarIcon: ({ color }) => <ShoppingBag size={24} color={color} />,
+        }}
       />
       <Tab.Screen 
         name="ClientOrderHistory" 
         component={ClientOrderHistoryScreen}
         options={{
           tabBarIcon: ({ color }) => <FileText size={24} color={color} />,
-          tabBarLabel: "Client Orders",
+          tabBarLabel: "Orders History",
           headerStyle: {
             backgroundColor: "#fff",
           },
@@ -87,6 +72,13 @@ export default function AdminNavigator() {
           headerTitleStyle: {
             fontWeight: "bold",
           },
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsStack}
+        options={{
+          tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
         }}
       />
     </Tab.Navigator>

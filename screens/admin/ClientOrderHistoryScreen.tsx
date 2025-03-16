@@ -8,7 +8,8 @@ import {
   ActivityIndicator, 
   TextInput,
   Modal,
-  Alert
+  Alert,
+  RefreshControl
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { Search, Calendar, ChevronDown, X, Share as ShareIcon } from 'lucide-react-native';
@@ -26,6 +27,7 @@ export default function ClientOrderHistoryScreen() {
   const [filteredClients, setFilteredClients] = useState([]);
   const [showClientList, setShowClientList] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState<string[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Date filter states
   const [isFilterActive, setIsFilterActive] = useState(false);
@@ -165,10 +167,12 @@ export default function ClientOrderHistoryScreen() {
     }
   };
 
-  const fetchClientOrders = async (clientId, isReset = false) => {
+  const fetchClientOrders = async (clientId, isRefreshing = false) => {
     if (!clientId) return;
     
-    setLoadingClientData(true);
+    if (!isRefreshing) {
+      setLoadingClientData(true);
+    }
     setClientOrders([]); // Clear existing orders before fetching new ones
     
     try {
@@ -189,7 +193,7 @@ export default function ClientOrderHistoryScreen() {
         .eq('client_id', clientId)
         .order('created_at', { ascending: false });
 
-      if (!isReset && startDate && endDate) {
+      if (!isRefreshing && startDate && endDate) {
         const startDateTime = new Date(startDate);
         startDateTime.setHours(0, 0, 0, 0);
         const startDateISO = startDateTime.toISOString();
@@ -241,6 +245,21 @@ export default function ClientOrderHistoryScreen() {
     setSelectedClient(null);
     setShowClientList(false);
   };
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (selectedClient) {
+        await fetchClientOrders(selectedClient.id, true);
+      }
+      await fetchClients();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      Alert.alert('Error', 'Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [selectedClient]);
 
   return (
     <View style={styles.container}>
@@ -457,6 +476,14 @@ export default function ClientOrderHistoryScreen() {
                   )}
                 </View>
               )}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={['#F47B20']} // Android
+                  tintColor="#F47B20" // iOS
+                />
+              }
             />
           ) : (
             <Text style={styles.emptyText}>No orders found for this client</Text>

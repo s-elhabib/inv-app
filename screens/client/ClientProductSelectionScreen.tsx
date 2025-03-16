@@ -316,6 +316,22 @@ export default function ClientProductSelectionScreen() {
     );
   };
 
+  // Add this new function to handle direct quantity changes
+  const handleQuantityChange = (productId, newQuantity) => {
+    setSelectedProducts(
+      selectedProducts.map(p => 
+        p.id === productId 
+          ? { ...p, quantity: Math.min(Math.max(0, newQuantity), p.stock) }
+          : p
+      ).filter(p => p.quantity > 0)
+    );
+  };
+
+  // Add this new function to handle item removal
+  const handleRemoveItem = (productId) => {
+    setSelectedProducts(selectedProducts.filter(p => p.id !== productId));
+  };
+
   if (loading && products.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -323,6 +339,95 @@ export default function ClientProductSelectionScreen() {
       </View>
     );
   }
+
+  const ConfirmOrderItem = ({ item, onIncrease, onDecrease, onQuantityChange, onRemove }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [tempQuantity, setTempQuantity] = useState(item.quantity.toString());
+
+    const handleQuantitySubmit = () => {
+      const newQuantity = parseInt(tempQuantity);
+      if (!isNaN(newQuantity) && newQuantity >= 0 && newQuantity <= item.stock) {
+        onQuantityChange(item.id, newQuantity);
+      } else {
+        setTempQuantity(item.quantity.toString());
+      }
+      setIsEditing(false);
+    };
+
+    return (
+      <View style={styles.confirmOrderItem}>
+        <View style={styles.mainContent}>
+          <View style={styles.titleRow}>
+            <Text 
+              style={styles.confirmOrderItemName}
+              numberOfLines={2}
+            >
+              {item.name}
+            </Text>
+            <TouchableOpacity 
+              style={styles.removeButton}
+              onPress={() => onRemove(item.id)}
+            >
+              <X size={18} color="#F44336" />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.detailsRow}>
+            <View style={styles.confirmOrderQuantityControls}>
+              <TouchableOpacity 
+                style={styles.quantityButton}
+                onPress={() => onDecrease(item.id)}
+              >
+                <Minus size={16} color="#F47B20" />
+              </TouchableOpacity>
+              
+              {isEditing ? (
+                <TextInput
+                  style={styles.quantityInput}
+                  value={tempQuantity}
+                  onChangeText={setTempQuantity}
+                  keyboardType="numeric"
+                  autoFocus
+                  onBlur={handleQuantitySubmit}
+                  onSubmitEditing={handleQuantitySubmit}
+                  selectTextOnFocus
+                />
+              ) : (
+                <TouchableOpacity 
+                  onPress={() => {
+                    setIsEditing(true);
+                    setTempQuantity(item.quantity.toString());
+                  }}
+                  style={styles.quantityDisplay}
+                >
+                  <Text style={styles.confirmOrderItemQuantity}>
+                    {item.quantity}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              
+              <TouchableOpacity 
+                style={styles.quantityButton}
+                onPress={() => onIncrease(item.id)}
+                disabled={item.quantity >= item.stock}
+              >
+                <Plus size={16} color={item.quantity >= item.stock ? "#ccc" : "#F47B20"} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.priceContainer}>
+              <Text style={styles.unitPrice}>
+                {formatCurrency(item.sellingPrice)} / unit
+              </Text>
+              <Text style={styles.confirmOrderItemPrice}>
+                {formatCurrency(item.sellingPrice * item.quantity)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -492,34 +597,13 @@ export default function ClientProductSelectionScreen() {
               data={selectedProducts}
               keyExtractor={item => item.id.toString()}
               renderItem={({ item }) => (
-                <View style={styles.confirmOrderItem}>
-                  <Text style={styles.confirmOrderItemName}>{item.name}</Text>
-                  <View style={styles.confirmOrderQuantityControls}>
-                    <TouchableOpacity 
-                      style={styles.quantityButton}
-                      onPress={() => handleDecreaseQuantity(item.id)}
-                    >
-                      {item.quantity === 1 ? (
-                        <X size={16} color="#F44336" />
-                      ) : (
-                        <Minus size={16} color="#F47B20" />
-                      )}
-                    </TouchableOpacity>
-                    
-                    <Text style={styles.confirmOrderItemQuantity}>x{item.quantity}</Text>
-                    
-                    <TouchableOpacity 
-                      style={styles.quantityButton}
-                      onPress={() => handleIncreaseQuantity(item.id)}
-                      disabled={item.quantity >= item.stock}
-                    >
-                      <Plus size={16} color={item.quantity >= item.stock ? "#ccc" : "#F47B20"} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.confirmOrderItemPrice}>
-                    {formatCurrency(item.sellingPrice * item.quantity)}
-                  </Text>
-                </View>
+                <ConfirmOrderItem
+                  item={item}
+                  onIncrease={() => handleIncreaseQuantity(item.id)}
+                  onDecrease={() => handleDecreaseQuantity(item.id)}
+                  onQuantityChange={handleQuantityChange}
+                  onRemove={handleRemoveItem}
+                />
               )}
               ListFooterComponent={
                 <View style={styles.confirmOrderTotal}>
@@ -876,47 +960,91 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, // Reduced from 12
   },
   confirmOrderItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#fff',
     paddingVertical: 12,
-    marginHorizontal: 5, // Reduced from 10
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  confirmOrderItemName: {
+  mainContent: {
     flex: 1,
+    gap: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  confirmOrderItemName: {
     fontSize: 16,
-    paddingRight: 15,
+    flex: 1,
+    color: '#333',
+    lineHeight: 22,
+  },
+  removeButton: {
+    padding: 4,
+  },
+  detailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  confirmOrderQuantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 2,
+  },
+  quantityButton: {
+    padding: 8,
+    borderRadius: 6,
+  },
+  quantityDisplay: {
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   confirmOrderItemQuantity: {
     fontSize: 16,
-    marginHorizontal: 18,
-    color: '#666',
-    width: 45,
+    color: '#333',
+    fontWeight: '500',
+  },
+  quantityInput: {
+    fontSize: 16,
+    minWidth: 40,
     textAlign: 'center',
+    padding: 4,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#F47B20',
+    borderRadius: 4,
   },
   confirmOrderItemPrice: {
     fontSize: 16,
-    fontWeight: '500',
-    width: 85,
+    fontWeight: '600',
+    color: '#F47B20',
+    minWidth: 80,
     textAlign: 'right',
   },
   confirmOrderTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginTop: 20,
-    marginHorizontal: 5, // Reduced from 10
     paddingTop: 16,
-    paddingBottom: 10,
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: '#eee',
   },
   confirmOrderTotalLabel: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#333',
   },
   confirmOrderTotalAmount: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#F47B20',
   },
@@ -972,5 +1100,24 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#cccccc',
     opacity: 0.7,
+  },
+  quantityInput: {
+    fontSize: 16,
+    minWidth: 45,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    padding: 2,
+    marginHorizontal: 8,
+    color: '#666',
+  },
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
+  unitPrice: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
   },
 });
