@@ -362,25 +362,17 @@ export default function ClientProductSelectionScreen() {
 
   const ConfirmOrderItem = ({ item, onIncrease, onDecrease, onQuantityChange, onRemove, onPriceChange }) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [isTotalEditing, setIsTotalEditing] = useState(false);
     const [tempQuantity, setTempQuantity] = useState(item.quantity.toString());
-    const [tempTotal, setTempTotal] = useState(
-      ((item.customPrice || item.sellingPrice) * item.quantity).toString()
-    );
 
-    const handleTotalSubmit = () => {
-      const newTotal = parseFloat(tempTotal);
-      if (!isNaN(newTotal) && newTotal >= 0) {
-        // Calculate new unit price based on total and quantity
-        const newUnitPrice = newTotal / item.quantity;
-        onPriceChange(item.id, newUnitPrice);
+    const handleQuantitySubmit = () => {
+      const newQuantity = parseInt(tempQuantity);
+      if (!isNaN(newQuantity) && newQuantity > 0 && newQuantity <= item.stock) {
+        onQuantityChange(item.id, newQuantity);
       } else {
-        setTempTotal(((item.customPrice || item.sellingPrice) * item.quantity).toString());
+        setTempQuantity(item.quantity.toString());
       }
-      setIsTotalEditing(false);
+      setIsEditing(false);
     };
-
-    const itemTotal = (item.customPrice || item.sellingPrice) * item.quantity;
 
     return (
       <View style={styles.confirmOrderItem}>
@@ -407,9 +399,24 @@ export default function ClientProductSelectionScreen() {
                 <Minus size={16} color="#F47B20" />
               </TouchableOpacity>
 
-              <Text style={styles.confirmOrderItemQuantity}>
-                {item.quantity}
-              </Text>
+              <TouchableOpacity onPress={() => setIsEditing(true)}>
+                {isEditing ? (
+                  <TextInput
+                    style={styles.quantityInput}
+                    value={tempQuantity}
+                    onChangeText={setTempQuantity}
+                    keyboardType="numeric"
+                    autoFocus
+                    onBlur={handleQuantitySubmit}
+                    onSubmitEditing={handleQuantitySubmit}
+                    selectTextOnFocus
+                  />
+                ) : (
+                  <Text style={styles.confirmOrderItemQuantity}>
+                    {item.quantity}
+                  </Text>
+                )}
+              </TouchableOpacity>
 
               <TouchableOpacity 
                 style={styles.quantityButton}
@@ -425,31 +432,9 @@ export default function ClientProductSelectionScreen() {
               <Text style={styles.unitPriceText}>
                 Unit: {item.sellingPrice.toFixed(2)} MAD
               </Text>
-              
-              {isTotalEditing ? (
-                <TextInput
-                  style={styles.totalInput}
-                  value={tempTotal}
-                  onChangeText={setTempTotal}
-                  keyboardType="numeric"
-                  autoFocus
-                  onBlur={handleTotalSubmit}
-                  onSubmitEditing={handleTotalSubmit}
-                  selectTextOnFocus
-                />
-              ) : (
-                <TouchableOpacity 
-                  onPress={() => {
-                    setIsTotalEditing(true);
-                    setTempTotal(itemTotal.toFixed(2));
-                  }}
-                  style={styles.totalDisplay}
-                >
-                  <Text style={styles.totalText}>
-                    Total: {itemTotal.toFixed(2)} MAD
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <Text style={styles.totalPriceText}>
+                Total: {((item.customPrice || item.sellingPrice) * item.quantity).toFixed(2)} MAD
+              </Text>
             </View>
           </View>
         </View>
@@ -1217,5 +1202,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+  quantityInput: {
+    minWidth: 40,
+    textAlign: 'center',
+    fontSize: 16,
+    fontWeight: '500',
+    borderWidth: 1,
+    borderColor: '#F47B20',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    marginHorizontal: 8,
   },
 });
