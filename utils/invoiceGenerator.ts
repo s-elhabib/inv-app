@@ -6,10 +6,10 @@ import * as Linking from 'expo-linking';
 interface OrderItem {
   products: {
     name: string;
-    sellingPrice: number;
   };
   quantity: number;
   amount: number;
+  unit_price: number;
 }
 
 interface Order {
@@ -63,7 +63,7 @@ const generateInvoiceHTML = (order: Order, language: 'en' | 'ar' = 'en') => {
     <tr>
       <td>${item.products.name}</td>
       <td>${item.quantity}</td>
-      <td>${formatCurrency(item.products.sellingPrice)}</td>
+      <td>${formatCurrency(item.unit_price)}</td>
       <td>${formatCurrency(item.amount)}</td>
     </tr>
   `).join('');

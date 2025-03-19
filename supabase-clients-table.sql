@@ -39,6 +39,16 @@ ON public.clients
 FOR DELETE
 USING (auth.role() = 'authenticated');
 
+-- Add deleted_at column to clients table
+ALTER TABLE public.clients 
+ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+
+-- Modify existing policies to exclude deleted records
+CREATE OR REPLACE POLICY "Show non-deleted clients"
+ON public.clients
+FOR SELECT
+USING (deleted_at IS NULL);
+
 -- Insert sample data
 INSERT INTO public.clients (name, email, phone, address, status, revenue, image)
 VALUES 

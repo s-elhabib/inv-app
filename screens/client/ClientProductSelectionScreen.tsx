@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
-  RefreshControl
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { Search, Plus, Minus, ShoppingCart, Check, X, ChevronDown } from 'lucide-react-native';
@@ -214,7 +216,7 @@ export default function ClientProductSelectionScreen() {
             order_id: orderId,
             quantity: product.quantity,
             amount: finalAmount,
-            unit_price: finalUnitPrice,
+            unit_price: finalUnitPrice, // Store the actual unit price used
             created_at: new Date().toISOString()
           });
         
@@ -250,9 +252,9 @@ export default function ClientProductSelectionScreen() {
             id,
             quantity,
             amount,
+            unit_price,
             products (
-              name,
-              sellingPrice
+              name
             )
           ),
           clients (
@@ -345,7 +347,7 @@ export default function ClientProductSelectionScreen() {
         p.id === productId
           ? { 
               ...p, 
-              customPrice: parseFloat(newUnitPrice) // Ensure it's a number
+              customPrice: newUnitPrice // Ensure it's a number
             }
           : p
       )
@@ -360,37 +362,64 @@ export default function ClientProductSelectionScreen() {
     );
   }
 
-  const ConfirmOrderItem = ({ item, onIncrease, onDecrease, onQuantityChange, onRemove, onPriceChange }) => {
+  // Add this new component for the quantity input
+  const QuantityInput = ({ value, onChange, stock }) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [tempQuantity, setTempQuantity] = useState(item.quantity.toString());
+    const [tempQuantity, setTempQuantity] = useState(value.toString());
 
-    const handleQuantitySubmit = () => {
+    const handleSubmit = () => {
       const newQuantity = parseInt(tempQuantity);
-      if (!isNaN(newQuantity) && newQuantity > 0 && newQuantity <= item.stock) {
-        onQuantityChange(item.id, newQuantity);
+      if (!isNaN(newQuantity) && newQuantity >= 0 && newQuantity <= stock) {
+        onChange(newQuantity);
       } else {
-        setTempQuantity(item.quantity.toString());
+        setTempQuantity(value.toString());
       }
       setIsEditing(false);
     };
 
     return (
-      <View style={styles.confirmOrderItem}>
-        <View style={styles.mainContent}>
-          <View style={styles.titleRow}>
-            <Text style={styles.confirmOrderItemName} numberOfLines={2}>
-              {item.name}
-            </Text>
-            <TouchableOpacity 
-              style={styles.removeButton}
-              onPress={() => onRemove(item.id)}
-            >
-              <X size={18} color="#F44336" />
-            </TouchableOpacity>
-          </View>
+      <TouchableOpacity onPress={() => setIsEditing(true)}>
+        {isEditing ? (
+          <TextInput
+            style={styles.quantityInput}
+            value={tempQuantity}
+            onChangeText={setTempQuantity}
+            keyboardType="numeric"
+            autoFocus
+            onBlur={handleSubmit}
+            onSubmitEditing={handleSubmit}
+            selectTextOnFocus
+            maxLength={5}
+          />
+        ) : (
+          <Text style={styles.quantityText}>{value}</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
+  const ConfirmOrderItem = ({ item, onIncrease, onDecrease, onQuantityChange, onRemove, onPriceChange }) => {
+    const [isPriceEditing, setIsPriceEditing] = useState(false);
+    const [tempPrice, setTempPrice] = useState(
+      (item.customPrice || item.sellingPrice).toString()
+    );
+
+    const handlePriceSubmit = () => {
+      const newPrice = parseFloat(tempPrice);
+      if (!isNaN(newPrice) && newPrice >= 0) {
+        onPriceChange(item.id, newPrice);
+      } else {
+        setTempPrice((item.customPrice || item.sellingPrice).toString());
+      }
+      setIsPriceEditing(false);
+    };
+
+    return (
+      <View style={styles.confirmOrderItem}>
+        <View style={styles.confirmOrderItemContent}>
+          <Text style={styles.confirmOrderItemName}>{item.name}</Text>
+          
           <View style={styles.detailsRow}>
-            {/* Quantity Controls */}
             <View style={styles.quantityControls}>
               <TouchableOpacity 
                 style={styles.quantityButton}
@@ -399,24 +428,11 @@ export default function ClientProductSelectionScreen() {
                 <Minus size={16} color="#F47B20" />
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => setIsEditing(true)}>
-                {isEditing ? (
-                  <TextInput
-                    style={styles.quantityInput}
-                    value={tempQuantity}
-                    onChangeText={setTempQuantity}
-                    keyboardType="numeric"
-                    autoFocus
-                    onBlur={handleQuantitySubmit}
-                    onSubmitEditing={handleQuantitySubmit}
-                    selectTextOnFocus
-                  />
-                ) : (
-                  <Text style={styles.confirmOrderItemQuantity}>
-                    {item.quantity}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              <QuantityInput
+                value={item.quantity}
+                onChange={(newQuantity) => onQuantityChange(item.id, newQuantity)}
+                stock={item.stock}
+              />
 
               <TouchableOpacity 
                 style={styles.quantityButton}
@@ -427,11 +443,29 @@ export default function ClientProductSelectionScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Price Information */}
             <View style={styles.priceContainer}>
-              <Text style={styles.unitPriceText}>
-                Unit: {item.sellingPrice.toFixed(2)} MAD
-              </Text>
+              <TouchableOpacity 
+                style={styles.priceEditContainer} 
+                onPress={() => setIsPriceEditing(true)}
+              >
+                {isPriceEditing ? (
+                  <TextInput
+                    style={styles.priceInput}
+                    value={tempPrice}
+                    onChangeText={setTempPrice}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                    onBlur={handlePriceSubmit}
+                    onSubmitEditing={handlePriceSubmit}
+                    selectTextOnFocus
+                    maxLength={10}
+                  />
+                ) : (
+                  <Text style={styles.unitPriceText}>
+                    Unit: {(item.customPrice || item.sellingPrice).toFixed(2)} MAD
+                  </Text>
+                )}
+              </TouchableOpacity>
               <Text style={styles.totalPriceText}>
                 Total: {((item.customPrice || item.sellingPrice) * item.quantity).toFixed(2)} MAD
               </Text>
@@ -531,18 +565,13 @@ export default function ClientProductSelectionScreen() {
         data={filteredProducts}
         keyExtractor={item => item.id.toString()}
         renderItem={({ item }) => {
-          const selectedProduct = selectedProducts.find(p => p.id === item.id);
-          const quantity = selectedProduct ? selectedProduct.quantity : 0;
-          
+          const quantity = selectedProducts.find(p => p.id === item.id)?.quantity || 0;
+
           return (
             <View style={styles.productItem}>
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{item.name}</Text>
-                <Text style={styles.productPrice}>{formatCurrency(item.sellingPrice)}</Text>
-                <Text style={styles.productStock}>In stock: {item.stock}</Text>
-                {item.categories && (
-                  <Text style={styles.productCategory}>{item.categories.name}</Text>
-                )}
+                <Text style={styles.productPrice}>{item.sellingPrice} MAD</Text>
               </View>
               
               <View style={styles.quantityControls}>
@@ -555,7 +584,11 @@ export default function ClientProductSelectionScreen() {
                       <Minus size={16} color="#F47B20" />
                     </TouchableOpacity>
                     
-                    <Text style={styles.quantityText}>{quantity}</Text>
+                    <QuantityInput
+                      value={quantity}
+                      onChange={(newQuantity) => handleQuantityChange(item.id, newQuantity)}
+                      stock={item.stock}
+                    />
                   </>
                 )}
                 
@@ -627,55 +660,76 @@ export default function ClientProductSelectionScreen() {
         transparent={true}
         animationType="slide"
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.confirmModalContent}>
-            <Text style={styles.confirmModalTitle}>Confirm Order</Text>
-            
-            <FlatList
-              data={selectedProducts}
-              keyExtractor={item => item.id.toString()}
-              renderItem={({ item }) => (
-                <ConfirmOrderItem
-                  item={item}
-                  onIncrease={() => handleIncreaseQuantity(item.id)}
-                  onDecrease={() => handleDecreaseQuantity(item.id)}
-                  onQuantityChange={handleQuantityChange}
-                  onRemove={handleRemoveItem}
-                  onPriceChange={handlePriceChange}
-                />
-              )}
-              ListFooterComponent={
-                <View style={styles.confirmOrderTotal}>
-                  <Text style={styles.confirmOrderTotalLabel}>Total:</Text>
-                  <Text style={styles.confirmOrderTotalAmount}>{formatCurrency(totalAmount)}</Text>
-                </View>
-              }
-              contentContainerStyle={styles.confirmOrderItemsList}
-            />
-            
-            <View style={styles.confirmModalActions}>
-              <TouchableOpacity 
-                style={[styles.confirmModalButton, styles.confirmCancelButton]}
-                onPress={() => setShowConfirmModal(false)}
-              >
-                <Text style={styles.confirmCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[
-                  styles.confirmModalButton, 
-                  styles.confirmConfirmButton,
-                  selectedProducts.length === 0 && styles.disabledButton
-                ]}
-                onPress={handleConfirmOrder}
-                disabled={selectedProducts.length === 0}
-              >
-                <Text style={styles.confirmConfirmButtonText}>Confirm</Text>
-                <Check size={16} color="#fff" />
-              </TouchableOpacity>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[
+              styles.modalContent,
+              Platform.OS === "ios" && styles.modalContentIOS
+            ]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Confirm Order</Text>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setShowConfirmModal(false)}
+                >
+                  <X size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+
+              <FlatList
+                data={selectedProducts}
+                keyExtractor={item => item.id.toString()}
+                renderItem={({ item }) => (
+                  <ConfirmOrderItem
+                    item={item}
+                    onIncrease={() => handleIncreaseQuantity(item.id)}
+                    onDecrease={() => handleDecreaseQuantity(item.id)}
+                    onQuantityChange={handleQuantityChange}
+                    onRemove={handleRemoveItem}
+                    onPriceChange={handlePriceChange}
+                  />
+                )}
+                ListFooterComponent={
+                  <View style={styles.confirmOrderTotal}>
+                    <Text style={styles.confirmOrderTotalLabel}>Total:</Text>
+                    <Text style={styles.confirmOrderTotalAmount}>
+                      {formatCurrency(totalAmount)}
+                    </Text>
+                  </View>
+                }
+                contentContainerStyle={styles.confirmOrderItemsList}
+                // Add these props for better scrolling with keyboard
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+              />
+
+              <View style={styles.confirmModalActions}>
+                <TouchableOpacity 
+                  style={[styles.confirmModalButton, styles.confirmCancelButton]}
+                  onPress={() => setShowConfirmModal(false)}
+                >
+                  <Text style={styles.confirmCancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.confirmModalButton, 
+                    styles.confirmConfirmButton,
+                    selectedProducts.length === 0 && styles.disabledButton
+                  ]}
+                  onPress={handleConfirmOrder}
+                  disabled={selectedProducts.length === 0}
+                >
+                  <Text style={styles.confirmConfirmButtonText}>Confirm</Text>
+                  <Check size={16} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -942,22 +996,24 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    justifyContent: 'flex-end', // This will make the modal slide up from bottom
   },
   modalContent: {
-    width: '100%',
-    maxHeight: '80%',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    overflow: 'hidden',
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    maxHeight: '90%', // Limit height on larger screens
+  },
+  modalContentIOS: {
+    maxHeight: '75%', // Smaller height on iOS to account for keyboard
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    paddingHorizontal: 20,
+    paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
@@ -1071,21 +1127,43 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   priceContainer: {
+    flex: 1,
     alignItems: 'flex-end',
+  },
+  priceEditContainer: {
+    padding: 4,
+  },
+  priceInput: {
+    fontSize: 16,
+    minWidth: 80,
+    textAlign: 'right',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 4,
+    padding: Platform.OS === 'ios' ? 8 : 4,
+    color: '#666',
+    backgroundColor: 'white',
   },
   unitPriceText: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+  },
+  totalPriceText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 4,
   },
   totalInput: {
     borderWidth: 1,
     borderColor: '#F47B20',
     borderRadius: 4,
-    padding: 4,
-    minWidth: 100,
-    textAlign: 'right',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 150,
     fontSize: 16,
+    textAlign: 'right',
+    color: '#F47B20',
   },
   totalDisplay: {
     padding: 4,
@@ -1093,7 +1171,7 @@ const styles = StyleSheet.create({
   totalText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#F47B20',
+    color: '#333',
   },
   confirmOrderTotal: {
     flexDirection: 'row',

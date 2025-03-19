@@ -51,10 +51,10 @@ export default function ManageClientsScreen({ navigation, route }) {
       setLoading(true);
       console.log('Fetching clients...');
       
-      // Use a more reliable query with explicit ordering
       const { data, error } = await supabase
         .from('clients')
         .select('*')
+        .is('deleted_at', null) // Only fetch non-deleted clients
         .order('name', { ascending: true });
 
       if (error) {
@@ -98,13 +98,27 @@ export default function ManageClientsScreen({ navigation, route }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase
+              const now = new Date().toISOString();
+
+              // Soft delete all client's orders
+              const { error: ordersError } = await supabase
+                .from('orders')
+                .update({ deleted_at: now })
+                .eq('client_id', client.id);
+            
+              if (ordersError) throw ordersError;
+
+              // Soft delete the client
+              const { error: clientError } = await supabase
                 .from('clients')
-                .delete()
+                .update({ 
+                  deleted_at: now,
+                  status: 'deleted' // Optional: also update status
+                })
                 .eq('id', client.id);
-              
-              if (error) throw error;
-              
+            
+              if (clientError) throw clientError;
+            
               // Update local state
               setClients(clients.filter(c => c.id !== client.id));
               Alert.alert('Success', 'Client deleted successfully');
@@ -332,3 +346,4 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
 });
+
