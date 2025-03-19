@@ -6,12 +6,15 @@ import LoginScreen from "./screens/LoginScreen"
 import ClientNavigator from "./navigation/ClientNavigator"
 import AdminNavigator from "./navigation/AdminNavigator"
 import { AuthProvider, useAuth } from "./context/AuthContext"
+import OrdersStack from './navigation/AdminStack';
 
 const Stack = createNativeStackNavigator()
 
 function AppNavigator() {
   const { user, isAuthenticated, isLoading } = useAuth()
   
+  console.log('AppNavigator - Current user role:', user?.role); // Add this log
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -25,12 +28,19 @@ function AppNavigator() {
       {!isAuthenticated ? (
         <Stack.Screen name="Login" component={LoginScreen} />
       ) : user?.role === "admin" ? (
-        <Stack.Screen name="AdminApp" component={AdminNavigator} />
+        <>
+          <Stack.Screen name="AdminApp" component={AdminNavigator} />
+          <Stack.Screen 
+            name="OrdersList" 
+            component={OrdersStack}
+            options={{ headerShown: false }}
+          />
+        </>
       ) : (
         <Stack.Screen name="ClientApp" component={ClientNavigator} />
       )}
     </Stack.Navigator>
-  )
+  );
 }
 
 export default function App() {

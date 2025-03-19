@@ -5,10 +5,23 @@ import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, Chevron
 import { useState, useEffect, useCallback } from "react"
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
+import { useNavigation } from '@react-navigation/native';
 
 const screenWidth = Dimensions.get("window").width
 
 export default function DashboardScreen() {
+  const navigation = useNavigation();
+  
+  const handleOrdersPress = () => {
+    console.log('Orders card pressed');
+    try {
+      navigation.navigate('OrdersList');
+      console.log('Navigation to OrdersList attempted');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
+  };
+
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState({
     clientCount: 0,
@@ -497,7 +510,11 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          <View style={styles.statsCard}>
+          <TouchableOpacity 
+            style={styles.statsCard}
+            onPress={handleOrdersPress}
+            activeOpacity={0.7}
+          >
             <View style={styles.statsIconContainer}>
               <TrendingUp size={20} color="#F47B20" />
             </View>
@@ -518,7 +535,7 @@ export default function DashboardScreen() {
                 {dashboardData.salesGrowth >= 0 ? '+' : ''}{dashboardData.salesGrowth}%
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.statsRow}>
@@ -767,10 +784,11 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   statsCard: {
-    backgroundColor: "white",
+    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 15,
     width: "48%",
+    transform: [{ scale: 1 }],
   },
   statsIconContainer: {
     backgroundColor: "rgba(244, 123, 32, 0.1)",
