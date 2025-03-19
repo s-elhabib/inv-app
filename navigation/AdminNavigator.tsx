@@ -5,6 +5,7 @@ import InventoryScreen from "../screens/admin/InventoryScreen"
 import SettingsStack from "./SettingsStack"
 import ClientProductSelectionScreen from "../screens/client/ClientProductSelectionScreen"
 import ClientOrderHistoryScreen from "../screens/admin/ClientOrderHistoryScreen"
+import OrdersListScreen from "../screens/admin/OrdersListScreen"
 
 const Tab = createBottomTabNavigator()
 
@@ -79,6 +80,16 @@ export default function AdminNavigator() {
         component={SettingsStack}
         options={{
           tabBarIcon: ({ color }) => <Settings size={24} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="OrdersList"
+        component={OrdersListScreen}
+        options={{
+          title: 'Orders',
+          headerShown: true,
+          tabBarIcon: ({ color }) => <FileText size={24} color={color} />,
+          tabBarLabel: "Orders"
         }}
       />
     </Tab.Navigator>

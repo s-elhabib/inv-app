@@ -161,9 +161,9 @@ export default function DashboardScreen() {
 
       // Calculate total revenue - convert decimal strings to numbers
       const totalRevenue = sales ? sales.reduce((sum, sale) => {
-        const amount = parseFloat(sale.amount) || 0
+        const amount = parseFloat(sale.amount || '0') || 0
         return sum + amount
-      }, 0) : 0
+      }, 0) : 0;
 
       console.log("Total revenue calculated:", totalRevenue)
 
@@ -221,15 +221,29 @@ export default function DashboardScreen() {
       const totalInventoryValue = productsWithStock?.reduce((sum, product) => 
         sum + (product.price * product.stock), 0) || 0
 
+      // Fetch orders count
+      const { data: orders, error: ordersError } = await supabase
+        .from('orders')
+        .select('id, created_at')
+        .order('created_at', { ascending: false })
+
+      if (ordersError) {
+        console.error("Orders fetch error:", ordersError)
+        throw ordersError
+      }
+
+      // Calculate orders growth
+      const ordersGrowth = calculateGrowth(orders || [], 'created_at')
+
       setDashboardData({
         clientCount: clients?.length || 0,
         productCount: products?.length || 0,
         totalRevenue,
-        totalSales: sales?.length || 0,
+        totalSales: orders?.length || 0, // This is now total orders
         clientGrowth,
         productGrowth,
         revenueGrowth,
-        salesGrowth,
+        salesGrowth: ordersGrowth, // This is now orders growth
         monthlyRevenue: monthlyRevenueData,
         monthlyRevenueLabels,
         categorySales,
@@ -241,7 +255,7 @@ export default function DashboardScreen() {
         clientCount: clients?.length || 0,
         productCount: products?.length || 0,
         totalRevenue,
-        totalSales: sales?.length || 0
+        totalSales: orders?.length || 0, // This is now total orders
       })
 
     } catch (error) {
@@ -488,7 +502,7 @@ export default function DashboardScreen() {
               <TrendingUp size={20} color="#F47B20" />
             </View>
             <Text style={styles.statsValue}>{dashboardData.totalSales}</Text>
-            <Text style={styles.statsLabel}>Total Sales</Text>
+            <Text style={styles.statsLabel}>Total Orders</Text>
             <View style={[
               styles.statsChange,
               dashboardData.salesGrowth < 0 ? styles.statsChangeNegative : null
