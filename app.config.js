@@ -16,11 +16,16 @@ module.exports = {
     bundleIdentifier: 'com.yourcompany.invapp'
   },
   android: {
+    package: 'com.yourcompany.invapp',
+    versionCode: 1,
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ffffff'
     },
-    package: 'com.yourcompany.invapp'
+    permissions: [
+      'WRITE_EXTERNAL_STORAGE',
+      'READ_EXTERNAL_STORAGE'
+    ]
   },
   web: {
     favicon: './assets/favicon.png'

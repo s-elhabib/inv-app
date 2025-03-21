@@ -7,30 +7,13 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
+    domains: ['your-domain.com'],
   },
-  transpilePackages: [
-    "react-native",
-    "react-native-svg",
-    "react-native-chart-kit",
-    "@react-navigation/native",
-    "@react-navigation/native-stack",
-    "@react-navigation/bottom-tabs",
-    "react-native-safe-area-context",
-    "react-native-screens"
-  ],
-  experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
-  },
+  output: 'standalone',
+  poweredByHeader: false,
+  compress: true,
 }
 
 mergeConfig(nextConfig, userConfig)
@@ -56,3 +39,6 @@ function mergeConfig(nextConfig, userConfig) {
 }
 
 export default nextConfig
+
+
+
