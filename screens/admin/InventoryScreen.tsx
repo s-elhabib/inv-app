@@ -1,7 +1,19 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Modal, Alert } from "react-native"
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  FlatList, 
+  TouchableOpacity, 
+  TextInput, 
+  Image, 
+  Modal, 
+  Alert,
+  ScrollView,
+  ActivityIndicator
+} from "react-native"
 import { Search, Plus, Edit2, Trash2, Filter, X, Camera } from "lucide-react-native"
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from "../../lib/supabase"
@@ -28,7 +40,7 @@ interface Category {
 
 export default function InventoryScreen() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -55,21 +67,30 @@ export default function InventoryScreen() {
   const [editSaleQuantity, setEditSaleQuantity] = useState("");
   const [editSaleClientId, setEditSaleClientId] = useState<string | null>(null);
 
+  // New states for pagination
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const ITEMS_PER_PAGE = 10;
+
+  // Add a timestamp to ensure uniqueness even if IDs are duplicated
+  const [listKey, setListKey] = useState(Date.now());
+
   const navigation = useNavigation();
 
   // Fetch products from Supabase
   useFocusEffect(
     useCallback(() => {
-      fetchProducts();
+      setPage(0);
+      fetchProducts(0, searchQuery);
       fetchCategories();
-      fetchClients();
-    }, [])
+    }, [activeCategory])
   );
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (pageNumber = 0, searchTerm = "") => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      let query = supabase
         .from('products')
         .select(`
           *,
@@ -78,26 +99,53 @@ export default function InventoryScreen() {
             name
           )
         `)
-        .order('created_at', { ascending: false }); // Sort by created_at in descending order
+        .order('created_at', { ascending: false })
+        .range(pageNumber * ITEMS_PER_PAGE, (pageNumber + 1) * ITEMS_PER_PAGE - 1);
+
+      if (searchTerm) {
+        query = query.ilike('name', `%${searchTerm}%`);
+      }
+
+      const { data, error } = await query;
       
       if (error) {
         console.error('Error fetching products:', error);
         return;
       }
       
-      // Transform data to include category name
       const transformedData = data?.map(product => ({
         ...product,
-        categoryName: product.categories?.name || 'Unknown'
+        categoryName: product.categories?.name || 'Unknown',
+        uniqueKey: `${product.id}-${Date.now()}-${Math.random()}` // Add a unique key
       })) || [];
+
+      if (pageNumber === 0) {
+        setProducts(transformedData);
+      } else {
+        // Ensure no duplicates when adding more items
+        const existingIds = new Set(products.map(p => p.id));
+        const newProducts = transformedData.filter(p => !existingIds.has(p.id));
+        setProducts(prev => [...prev, ...newProducts]);
+      }
+
+      setHasMore(data.length === ITEMS_PER_PAGE);
       
-      setProducts(transformedData);
     } catch (error) {
       console.error('Error:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Handle search with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setPage(0);
+      fetchProducts(0, searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const fetchCategories = async () => {
     try {
@@ -431,11 +479,16 @@ export default function InventoryScreen() {
     if (activeCategory !== "All" && product.categoryName !== activeCategory) {
       return false;
     }
-    if (searchQuery && !product.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
     return true;
   });
+
+  const handleLoadMore = () => {
+    if (!loading && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchProducts(nextPage, searchQuery);
+    }
+  };
 
   // Create a function to validate quantity
   const validateQuantity = (value: string) => {
@@ -571,6 +624,44 @@ export default function InventoryScreen() {
     }
   };
 
+  const renderProduct = ({ item: product }) => (
+    <View style={styles.productCard}>
+      <Image 
+        source={product.image.startsWith('/') 
+          ? { uri: "https://via.placeholder.com/80" } 
+          : { uri: product.image }} 
+        style={styles.productImage} 
+      />
+      <View style={styles.productInfo}>
+        <View>
+          <Text style={styles.productName}>{product.name}</Text>
+          <Text style={styles.productCategory}>{product.categoryName}</Text>
+          <View style={styles.priceContainer}>
+            <Text style={styles.productCostPrice}>Cost: {product.price} MAD</Text>
+            <Text style={styles.productPrice}>Sell: {product.sellingPrice} MAD</Text>
+          </View>
+          <View style={styles.stockContainer}>
+            <Text style={styles.stockLabel}>Stock:</Text>
+            <Text style={[styles.stockValue, product.stock === 0 && styles.stockValueEmpty]}>
+              {product.stock === 0 ? "Out of stock" : product.stock}
+            </Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.productActions}>
+        <TouchableOpacity style={styles.sellButton} onPress={() => handleSellProduct(product)}>
+          <Text style={styles.sellButtonText}>Sell</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.editButton} onPress={() => handleEditProduct(product)}>
+          <Edit2 size={16} color="#F47B20" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteProduct(product.id)}>
+          <Trash2 size={16} color="#F44336" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -591,7 +682,7 @@ export default function InventoryScreen() {
       <View style={styles.actionBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesContainer}>
           <TouchableOpacity
-            key="All"
+            key="category-all"
             style={[styles.categoryButton, activeCategory === "All" && styles.activeCategoryButton]}
             onPress={() => setActiveCategory("All")}
           >
@@ -601,7 +692,7 @@ export default function InventoryScreen() {
           </TouchableOpacity>
           {categories.map((category) => (
             <TouchableOpacity
-              key={category.id}
+              key={`category-${category.id}`}
               style={[styles.categoryButton, activeCategory === category.name && styles.activeCategoryButton]}
               onPress={() => setActiveCategory(category.name)}
             >
@@ -618,57 +709,28 @@ export default function InventoryScreen() {
         </TouchableOpacity> */}
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text>Loading products...</Text>
-        </View>
-      ) : (
-        <ScrollView style={styles.productsList}>
-          {filteredProducts.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No products found</Text>
+      <FlatList
+        key={listKey} // Add a key to the FlatList itself
+        data={filteredProducts}
+        renderItem={renderProduct}
+        keyExtractor={(item) => item.uniqueKey || `product-${item.id}-${Math.random()}`} // Use the unique key
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={() => (
+          loading ? (
+            <View style={styles.loadingFooter}>
+              <ActivityIndicator size="small" color="#F47B20" />
             </View>
-          ) : (
-            filteredProducts.map((product) => (
-              <View key={product.id} style={styles.productCard}>
-                <Image 
-                  source={product.image.startsWith('/') 
-                    ? { uri: "https://via.placeholder.com/80" } 
-                    : { uri: product.image }} 
-                  style={styles.productImage} 
-                />
-                <View style={styles.productInfo}>
-                  <View>
-                    <Text style={styles.productName}>{product.name}</Text>
-                    <Text style={styles.productCategory}>{product.categoryName}</Text>
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.productCostPrice}>Cost: {product.price} MAD</Text>
-                      <Text style={styles.productPrice}>Sell: {product.sellingPrice} MAD</Text>
-                    </View>
-                    <View style={styles.stockContainer}>
-                      <Text style={styles.stockLabel}>Stock:</Text>
-                      <Text style={[styles.stockValue, product.stock === 0 && styles.stockValueEmpty]}>
-                        {product.stock === 0 ? "Out of stock" : product.stock}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                <View style={styles.productActions}>
-                  <TouchableOpacity style={styles.sellButton} onPress={() => handleSellProduct(product)}>
-                    <Text style={styles.sellButtonText}>Sell</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.editButton} onPress={() => handleEditProduct(product)}>
-                    <Edit2 size={16} color="#F47B20" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteProduct(product.id)}>
-                    <Trash2 size={16} color="#F44336" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          )}
-        </ScrollView>
-      )}
+          ) : null
+        )}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              {searchQuery ? 'No matching products found' : 'No products available'}
+            </Text>
+          </View>
+        )}
+      />
 
       {/* Add FAB here, before the modals */}
       <TouchableOpacity 
@@ -1492,5 +1554,19 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.30,
     shadowRadius: 4.65,
+  },
+  loadingFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#666',
   },
 });
