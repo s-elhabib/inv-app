@@ -52,7 +52,7 @@ export default function DashboardScreen() {
   const [clientOrders, setClientOrders] = useState([])
   const [loadingClientData, setLoadingClientData] = useState(false)
   const [profitFilter, setProfitFilter] = useState('day'); // 'day', 'week', '15days', 'month'
-  const [showProfit, setShowProfit] = useState(true);
+  const [showProfit, setShowProfit] = useState(false);
   const [salesData, setSalesData] = useState([]);
 
   useFocusEffect(
