@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Modal, FlatList, TextInput } from "react-native"
 import { LineChart, PieChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
-import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X, Search, Edit2, Package } from "lucide-react-native"
+import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X, Search, Edit2, Package, Eye, EyeOff } from "lucide-react-native"
 import { useState, useEffect, useCallback } from "react"
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
@@ -36,7 +36,13 @@ export default function DashboardScreen() {
     monthlyRevenueLabels: [],
     categorySales: [],
     topClients: [],
-    totalInventoryValue: 0
+    totalInventoryValue: 0,
+    totalProfit: 0,
+    profitGrowth: 0,
+    monthlyProfit: [0, 0, 0, 0, 0, 0],
+    totalOrders: 0,
+    ordersGrowth: 0,
+    monthlyOrders: [0, 0, 0, 0, 0, 0],
   })
 
   // Add these new state variables
@@ -45,6 +51,9 @@ export default function DashboardScreen() {
   const [clientList, setClientList] = useState([])
   const [clientOrders, setClientOrders] = useState([])
   const [loadingClientData, setLoadingClientData] = useState(false)
+  const [profitFilter, setProfitFilter] = useState('day'); // 'day', 'week', '15days', 'month'
+  const [showProfit, setShowProfit] = useState(true);
+  const [salesData, setSalesData] = useState([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -248,7 +257,62 @@ export default function DashboardScreen() {
       // Calculate orders growth
       const ordersGrowth = calculateGrowth(orders || [], 'created_at')
 
-      setDashboardData({
+      // Fetch sales with product details for profit calculation
+      const { data: salesWithProducts, error: profitSalesError } = await supabase
+        .from('sales')
+        .select(`
+          id,
+          amount,
+          quantity,
+          created_at,
+          products (
+            price,
+            "sellingPrice"
+          )
+        `)
+      
+      if (profitSalesError) throw profitSalesError;
+
+      setSalesData(salesWithProducts || []);
+
+      // Calculate total profit
+      const totalProfit = salesWithProducts?.reduce((sum, sale) => {
+        const costPrice = parseFloat(sale.products?.price || '0');
+        const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
+        const quantity = parseInt(sale.quantity || '1');
+        const profitPerUnit = sellingPrice - costPrice;
+        return sum + (profitPerUnit * quantity);
+      }, 0) || 0;
+
+      // Calculate monthly profit
+      const { data: monthlyProfitData, labels: monthlyLabels } = calculateMonthlyProfit(salesWithProducts || []);
+
+      // Calculate profit growth
+      const profitGrowth = calculateProfitGrowth(salesWithProducts || []);
+
+      // Fetch orders with their details
+      const { data: ordersData, error: ordersDetailsError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          total_amount,
+          created_at,
+          status
+        `)
+        .eq('status', 'completed') // Only count completed orders
+        .order('created_at', { ascending: false });
+
+      if (ordersDetailsError) throw ordersDetailsError;
+
+      // Calculate total orders
+      const totalOrders = ordersData?.length || 0;
+
+      // Calculate monthly orders distribution
+      const { data: monthlyOrdersData, labels: monthlyOrdersLabels } = calculateMonthlyOrders(ordersData || []);
+
+      // Update dashboard data with orders information
+      setDashboardData(prev => ({
+        ...prev,
         clientCount: clients?.length || 0,
         productCount: products?.length || 0,
         totalRevenue,
@@ -261,20 +325,26 @@ export default function DashboardScreen() {
         monthlyRevenueLabels,
         categorySales,
         topClients,
-        totalInventoryValue // This will now use price instead of costPrice
-      })
+        totalInventoryValue, // This will now use price instead of costPrice
+        totalProfit,
+        profitGrowth,
+        monthlyProfit: monthlyProfitData,
+        totalOrders,
+        ordersGrowth,
+        monthlyOrders: monthlyOrdersData,
+      }));
 
       console.log("Dashboard data set:", {
         clientCount: clients?.length || 0,
         productCount: products?.length || 0,
         totalRevenue,
         totalSales: orders?.length || 0, // This is now total orders
-      })
+      });
 
     } catch (error) {
-      console.error("Error fetching dashboard data:", error)
+      console.error("Error fetching dashboard data:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -412,6 +482,44 @@ export default function DashboardScreen() {
     }
   }
 
+  // Add this helper function to filter profits by date range
+  const getFilteredProfit = (sales, filter) => {
+    const now = new Date();
+    const startDate = new Date();
+    
+    switch (filter) {
+      case 'day':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'week':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case '15days':
+        startDate.setDate(now.getDate() - 15);
+        break;
+      case 'month':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      default:
+        startDate.setHours(0, 0, 0, 0);
+    }
+
+    const filteredSales = sales.filter(sale => {
+      const saleDate = new Date(sale.created_at);
+      return saleDate >= startDate && saleDate <= now;
+    });
+
+    const totalProfit = filteredSales.reduce((sum, sale) => {
+      const costPrice = parseFloat(sale.products?.price || '0');
+      const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
+      const quantity = parseInt(sale.quantity || '1');
+      const profitPerUnit = sellingPrice - costPrice;
+      return sum + (profitPerUnit * quantity);
+    }, 0);
+
+    return totalProfit;
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -545,6 +653,67 @@ export default function DashboardScreen() {
             </View>
             <Text style={styles.statsValue}>{formatCurrency(dashboardData.totalInventoryValue)}</Text>
             <Text style={styles.statsLabel}>Total Inventory Value</Text>
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={[styles.statsCard, styles.fullWidthCard]}>
+            <View style={styles.statsHeader}>
+              <View style={styles.statsIconContainer}>
+                <TrendingUp size={20} color="#F47B20" />
+              </View>
+              <TouchableOpacity 
+                onPress={() => setShowProfit(!showProfit)}
+                style={styles.eyeIcon}
+              >
+                {showProfit ? <Eye size={20} color="#666" /> : <EyeOff size={20} color="#666" />}
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.statsValue}>
+              {showProfit 
+                ? formatCurrency(getFilteredProfit(salesData, profitFilter))
+                : '****'
+              }
+            </Text>
+            <Text style={styles.statsLabel}>Total Profit</Text>
+            
+            <View style={styles.filterContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <TouchableOpacity
+                  style={[styles.filterButton, profitFilter === 'day' && styles.filterButtonActive]}
+                  onPress={() => setProfitFilter('day')}
+                >
+                  <Text style={[styles.filterText, profitFilter === 'day' && styles.filterTextActive]}>
+                    Today
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, profitFilter === 'week' && styles.filterButtonActive]}
+                  onPress={() => setProfitFilter('week')}
+                >
+                  <Text style={[styles.filterText, profitFilter === 'week' && styles.filterTextActive]}>
+                    This Week
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, profitFilter === '15days' && styles.filterButtonActive]}
+                  onPress={() => setProfitFilter('15days')}
+                >
+                  <Text style={[styles.filterText, profitFilter === '15days' && styles.filterTextActive]}>
+                    15 Days
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterButton, profitFilter === 'month' && styles.filterButtonActive]}
+                  onPress={() => setProfitFilter('month')}
+                >
+                  <Text style={[styles.filterText, profitFilter === 'month' && styles.filterTextActive]}>
+                    This Month
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
           </View>
         </View>
       </View>
@@ -1051,7 +1220,155 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   fullWidthCard: {
-    flex: 1,
-    marginHorizontal: 20,
+    width: '100%', // Changed from flex: 1
+    marginHorizontal: 0, // Remove horizontal margin if any
+  },
+  statsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 8,
+  },
+  eyeIcon: {
+    padding: 4,
+  },
+  filterContainer: {
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: '#F47B20',
+  },
+  filterText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  filterTextActive: {
+    color: '#fff',
   },
 });
+
+const calculateMonthlyProfit = (sales) => {
+  const months = Array(6).fill(0);
+  const now = new Date();
+  
+  const monthNames = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(now.getMonth() - i);
+    monthNames.push(d.toLocaleString('default', { month: 'short' }));
+  }
+  
+  sales.forEach(sale => {
+    const saleDate = new Date(sale.created_at);
+    const monthDiff = (now.getMonth() - saleDate.getMonth()) + 
+                     (now.getFullYear() - saleDate.getFullYear()) * 12;
+    
+    if (monthDiff >= 0 && monthDiff < 6) {
+      const costPrice = parseFloat(sale.products?.price || '0');
+      const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
+      const quantity = parseInt(sale.quantity || '1');
+      const profitPerUnit = sellingPrice - costPrice;
+      months[5 - monthDiff] += (profitPerUnit * quantity);
+    }
+  });
+  
+  return { data: months, labels: monthNames };
+};
+
+const calculateProfitGrowth = (sales) => {
+  try {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const lastMonth = currentMonth - 1;
+    
+    const currentMonthSales = sales.filter(sale => {
+      const saleDate = new Date(sale.created_at);
+      return saleDate.getMonth() === currentMonth;
+    });
+
+    const lastMonthSales = sales.filter(sale => {
+      const saleDate = new Date(sale.created_at);
+      return saleDate.getMonth() === lastMonth;
+    });
+
+    const currentProfit = currentMonthSales.reduce((sum, sale) => {
+      const costPrice = parseFloat(sale.products?.price || '0');
+      const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
+      const quantity = parseInt(sale.quantity || '1');
+      return sum + ((sellingPrice - costPrice) * quantity);
+    }, 0);
+
+    const lastProfit = lastMonthSales.reduce((sum, sale) => {
+      const costPrice = parseFloat(sale.products?.price || '0');
+      const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
+      const quantity = parseInt(sale.quantity || '1');
+      return sum + ((sellingPrice - costPrice) * quantity);
+    }, 0);
+
+    if (lastProfit === 0) return currentProfit > 0 ? 100 : 0;
+    return Math.round(((currentProfit - lastProfit) / lastProfit) * 100);
+  } catch (error) {
+    console.error("Error calculating profit growth:", error);
+    return 0;
+  }
+};
+
+const calculateMonthlyOrders = (orders) => {
+  const months = Array(6).fill(0);
+  const now = new Date();
+  
+  const monthNames = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(now.getMonth() - i);
+    monthNames.push(d.toLocaleString('default', { month: 'short' }));
+  }
+  
+  orders.forEach(order => {
+    const orderDate = new Date(order.created_at);
+    const monthDiff = (now.getMonth() - orderDate.getMonth()) + 
+                     (now.getFullYear() - orderDate.getFullYear()) * 12;
+    
+    if (monthDiff >= 0 && monthDiff < 6) {
+      months[5 - monthDiff] += 1;
+    }
+  });
+  
+  return { data: months, labels: monthNames };
+};
+
+const calculateOrdersGrowth = (orders) => {
+  try {
+    const now = new Date();
+    const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
+
+    const currentMonthOrders = orders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      return orderDate >= oneMonthAgo && orderDate <= now;
+    });
+
+    const previousMonthOrders = orders.filter(order => {
+      const orderDate = new Date(order.created_at);
+      return orderDate >= twoMonthsAgo && orderDate < oneMonthAgo;
+    });
+
+    const currentCount = currentMonthOrders.length;
+    const previousCount = previousMonthOrders.length;
+
+    if (previousCount === 0) return currentCount > 0 ? 100 : 0;
+    return Math.round(((currentCount - previousCount) / previousCount) * 100);
+  } catch (error) {
+    console.error("Error calculating orders growth:", error);
+    return 0;
+  }
+};
