@@ -2,12 +2,26 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity
 import { LineChart, PieChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
 import { ArrowUp, ArrowDown, Users, ShoppingBag, DollarSign, TrendingUp, ChevronDown, X, Search, Edit2, Package, Eye, EyeOff } from "lucide-react-native"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react" // Combined useMemo here
 import { supabase } from "../../lib/supabase"
 import { useFocusEffect } from "@react-navigation/native"
 import { useNavigation } from '@react-navigation/native';
 
 const screenWidth = Dimensions.get("window").width
+
+const DashboardSection = ({ children, onError }) => {
+  try {
+    return children;
+  } catch (error) {
+    console.error('Dashboard section error:', error);
+    onError(error);
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Failed to load section</Text>
+      </View>
+    );
+  }
+};
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
@@ -23,6 +37,12 @@ export default function DashboardScreen() {
   };
 
   const [loading, setLoading] = useState(true)
+  const [loadingStates, setLoadingStates] = useState({
+    revenue: true,
+    inventory: true,
+    clients: true,
+    orders: true
+  });
   const [dashboardData, setDashboardData] = useState({
     clientCount: 0,
     productCount: 0,
@@ -125,11 +145,16 @@ export default function DashboardScreen() {
         {
           event: '*',
           schema: 'public',
-          table: 'products'
+          table: 'products',
+          filter: 'price,stock,sellingPrice'
         },
         (payload) => {
-          // Refresh dashboard data when products are modified
-          fetchDashboardData();
+          // Only update specific parts of the dashboard
+          if (payload.new.price !== payload.old.price || 
+              payload.new.stock !== payload.old.stock || 
+              payload.new.sellingPrice !== payload.old.sellingPrice) {
+            fetchDashboardData();
+          }
         }
       )
       .subscribe();
@@ -140,213 +165,101 @@ export default function DashboardScreen() {
   }, []);
 
   const fetchDashboardData = async () => {
-    setLoading(true)
+    setLoading(true);
     try {
-      // Fetch client count
-      const { data: clients, error: clientError } = await supabase
-        .from('clients')
-        .select('id, created_at')
-      
-      if (clientError) {
-        console.error("Client fetch error:", clientError)
-        throw clientError
-      }
+      // Combine multiple queries into a single parallel request
+      const [
+        { data: clients, error: clientError },
+        { data: products, error: productError },
+        { data: sales, error: salesError },
+        { data: orders, error: ordersError }
+      ] = await Promise.all([
+        supabase
+          .from('clients')
+          .select('id, created_at'),
+        
+        supabase
+          .from('products')
+          .select('id, category_id, price, "sellingPrice", created_at, stock'),
+        
+        supabase
+          .from('sales')
+          .select(`
+            id, 
+            amount,
+            quantity,
+            created_at,
+            client_id,
+            products (
+              price,
+              "sellingPrice"
+            )
+          `),
+        
+        supabase
+          .from('orders')
+          .select('id, created_at, total_amount, status')
+          .eq('status', 'completed')
+      ]);
 
-      // Fetch product count
-      const { data: products, error: productError } = await supabase
-        .from('products')
-        .select('id, category_id, price, "sellingPrice", created_at')
-      
-      if (productError) {
-        console.error("Product fetch error:", productError)
-        throw productError
-      }
+      if (clientError) throw clientError;
+      if (productError) throw productError;
+      if (salesError) throw salesError;
+      if (ordersError) throw ordersError;
 
-      // Fetch sales data
-      const { data: sales, error: salesError } = await supabase
-        .from('sales')
-        .select(`
-          id, 
-          amount,
-          product_id,
-          created_at,
-          products (
-            price,
-            "sellingPrice"
-          )
-        `)
-      
-      if (salesError) {
-        console.error("Sales fetch error:", salesError)
-        throw salesError
-      }
-
-      // Calculate total revenue - convert decimal strings to numbers
-      const totalRevenue = sales ? sales.reduce((sum, sale) => {
-        const amount = parseFloat(sale.amount || '0') || 0
-        return sum + amount
-      }, 0) : 0;
-
-      console.log("Total revenue calculated:", totalRevenue)
-
-      // Calculate monthly revenue
-      const { data: monthlyRevenueData, labels: monthlyRevenueLabels } = calculateMonthlyRevenue(sales || [])
-      
-      // Calculate category sales
-      const categorySales = calculateCategorySales(sales || [], products || [])
-      
-      // Calculate growth percentages
-      const clientGrowth = calculateGrowth(clients || [], 'created_at')
-      const productGrowth = calculateGrowth(products || [], 'created_at')
-      const revenueGrowth = 15 // You can implement proper calculation
-      const salesGrowth = calculateSalesGrowth(sales || [])
-
-      // Fetch sales with client information for top clients
-      const { data: salesWithClients, error: salesClientError } = await supabase
-        .from('sales')
-        .select(`
-          amount,
-          clients:client_id (
-            id, name
-          )
-        `)
-      
-      if (salesClientError) throw salesClientError
-
-      // Calculate top clients by revenue
-      const clientRevenue = {}
-      salesWithClients?.forEach(sale => {
-        if (sale.clients && sale.clients.id) {
-          const clientId = sale.clients.id
-          const clientName = sale.clients.name
-          const amount = parseFloat(sale.amount) || 0
-          if (!clientRevenue[clientId]) {
-            clientRevenue[clientId] = { id: clientId, name: clientName, total: 0 }
-          }
-          clientRevenue[clientId].total += amount
-        }
-      })
-
-      // Convert to array and sort by revenue
-      const topClients = Object.values(clientRevenue)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 4)
-
-      // Fetch products with their cost price and stock
-      const { data: productsWithStock, error: productsError } = await supabase
-        .from('products')
-        .select('id, price, stock') // Changed costPrice to price
-      
-      if (productsError) throw productsError
-
-      // Calculate total inventory value using price instead of costPrice
-      const totalInventoryValue = productsWithStock?.reduce((sum, product) => 
-        sum + (product.price * product.stock), 0) || 0
-
-      // Fetch orders count
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('id, created_at')
-        .order('created_at', { ascending: false })
-
-      if (ordersError) {
-        console.error("Orders fetch error:", ordersError)
-        throw ordersError
-      }
-
-      // Calculate orders growth
-      const ordersGrowth = calculateGrowth(orders || [], 'created_at')
-
-      // Fetch sales with product details for profit calculation
-      const { data: salesWithProducts, error: profitSalesError } = await supabase
-        .from('sales')
-        .select(`
-          id,
-          amount,
-          quantity,
-          created_at,
-          products (
-            price,
-            "sellingPrice"
-          )
-        `)
-      
-      if (profitSalesError) throw profitSalesError;
-
-      setSalesData(salesWithProducts || []);
-
-      // Calculate total profit
-      const totalProfit = salesWithProducts?.reduce((sum, sale) => {
-        const costPrice = parseFloat(sale.products?.price || '0');
-        const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
-        const quantity = parseInt(sale.quantity || '1');
-        const profitPerUnit = sellingPrice - costPrice;
-        return sum + (profitPerUnit * quantity);
-      }, 0) || 0;
-
-      // Calculate monthly profit
-      const { data: monthlyProfitData, labels: monthlyLabels } = calculateMonthlyProfit(salesWithProducts || []);
-
-      // Calculate profit growth
-      const profitGrowth = calculateProfitGrowth(salesWithProducts || []);
-
-      // Fetch orders with their details
-      const { data: ordersData, error: ordersDetailsError } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          total_amount,
-          created_at,
-          status
-        `)
-        .eq('status', 'completed') // Only count completed orders
-        .order('created_at', { ascending: false });
-
-      if (ordersDetailsError) throw ordersDetailsError;
-
-      // Calculate total orders
-      const totalOrders = ordersData?.length || 0;
-
-      // Calculate monthly orders distribution
-      const { data: monthlyOrdersData, labels: monthlyOrdersLabels } = calculateMonthlyOrders(ordersData || []);
-
-      // Update dashboard data with orders information
-      setDashboardData(prev => ({
-        ...prev,
+      // Process data in memory instead of making additional queries
+      const processedData = {
         clientCount: clients?.length || 0,
         productCount: products?.length || 0,
-        totalRevenue,
-        totalSales: orders?.length || 0, // This is now total orders
-        clientGrowth,
-        productGrowth,
-        revenueGrowth,
-        salesGrowth: ordersGrowth, // This is now orders growth
-        monthlyRevenue: monthlyRevenueData,
-        monthlyRevenueLabels,
-        categorySales,
-        topClients,
-        totalInventoryValue, // This will now use price instead of costPrice
-        totalProfit,
-        profitGrowth,
-        monthlyProfit: monthlyProfitData,
-        totalOrders,
-        ordersGrowth,
-        monthlyOrders: monthlyOrdersData,
-      }));
+        totalRevenue: calculateTotalRevenue(sales),
+        totalSales: orders?.length || 0,
+        clientGrowth: calculateGrowth(clients || [], 'created_at'),
+        productGrowth: calculateGrowth(products || [], 'created_at'),
+        monthlyRevenue: calculateMonthlyRevenue(sales || []),
+        categorySales: calculateCategorySales(sales || [], products || []),
+        topClients: calculateTopClients(sales || []),
+        totalInventoryValue: calculateInventoryValue(products || []),
+        totalProfit: calculateTotalProfit(sales || []),
+        profitGrowth: calculateProfitGrowth(sales || []),
+        ordersGrowth: calculateGrowth(orders || [], 'created_at'),
+        monthlyOrders: calculateMonthlyOrders(orders || [])
+      };
 
-      console.log("Dashboard data set:", {
-        clientCount: clients?.length || 0,
-        productCount: products?.length || 0,
-        totalRevenue,
-        totalSales: orders?.length || 0, // This is now total orders
-      });
+      setSalesData(sales || []);
+      setDashboardData(processedData);
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  // Helper functions to process data
+  const calculateTotalRevenue = (sales) => {
+    return sales?.reduce((sum, sale) => sum + (parseFloat(sale.amount) || 0), 0) || 0;
+  };
+
+  const calculateInventoryValue = (products) => {
+    return products?.reduce((sum, product) => 
+      sum + (product.price * product.stock), 0) || 0;
+  };
+
+  const calculateTopClients = (sales) => {
+    const clientRevenue = {};
+    sales?.forEach(sale => {
+      if (sale.client_id) {
+        if (!clientRevenue[sale.client_id]) {
+          clientRevenue[sale.client_id] = { id: sale.client_id, total: 0 };
+        }
+        clientRevenue[sale.client_id].total += parseFloat(sale.amount) || 0;
+      }
+    });
+    
+    return Object.values(clientRevenue)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 4);
+  };
 
   const calculateMonthlyRevenue = (sales) => {
     const months = Array(6).fill(0)
@@ -1254,7 +1167,28 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#fff',
   },
+  errorContainer: {
+    backgroundColor: '#f8d7da',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#721c24',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
+
+const calculateTotalProfit = (sales) => {
+  return sales.reduce((sum, sale) => {
+    const costPrice = parseFloat(sale.products?.price || '0');
+    const sellingPrice = parseFloat(sale.products?.sellingPrice || '0');
+    const quantity = parseInt(sale.quantity || '1');
+    const profitPerUnit = sellingPrice - costPrice;
+    return sum + (profitPerUnit * quantity);
+  }, 0);
+};
 
 const calculateMonthlyProfit = (sales) => {
   const months = Array(6).fill(0);
