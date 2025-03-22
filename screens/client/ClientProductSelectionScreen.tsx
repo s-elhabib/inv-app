@@ -559,6 +559,14 @@ export default function ClientProductSelectionScreen() {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        {searchQuery ? (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => setSearchQuery('')}
+          >
+            <X size={18} color="#999" />
+          </TouchableOpacity>
+        ) : null}
       </View>
       
       <FlatList
@@ -785,11 +793,18 @@ const styles = StyleSheet.create({
     borderColor: '#ddd',
   },
   searchIcon: {
-    marginRight: 10,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    height: 40,
+    paddingVertical: 8,
+    paddingRight: 30, // Make room for clear button
+    fontSize: 16,
+  },
+  clearButton: {
+    padding: 5,
+    position: 'absolute',
+    right: 10,
   },
   productItem: {
     flexDirection: 'row',
