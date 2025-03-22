@@ -19,9 +19,13 @@ const FILTER_OPTIONS = [
 ];
 
 const OrdersListScreen = ({ navigation }) => {
+  const [activeFilter, setActiveFilter] = useState('day');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('day');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [categories, setCategories] = useState([]);
+  const [activeCategory, setActiveCategory] = useState('All');
 
   useEffect(() => {
     fetchOrders(activeFilter);
@@ -138,6 +142,17 @@ const OrdersListScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#F47B20" />
+        <Text style={styles.loadingMoreText}>Loading more orders...</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.filterContainer}>
@@ -170,6 +185,45 @@ const OrdersListScreen = ({ navigation }) => {
         </ScrollView>
       </View>
 
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={styles.categoriesContainer}
+      >
+        <TouchableOpacity
+          key="All"
+          style={[
+            styles.categoryButton, 
+            activeCategory === "All" && styles.activeCategoryButton
+          ]}
+          onPress={() => setActiveCategory("All")}
+        >
+          <Text style={[
+            styles.categoryButtonText, 
+            activeCategory === "All" && styles.activeCategoryButtonText
+          ]}>
+            All
+          </Text>
+        </TouchableOpacity>
+        {categories.map((category) => (
+          <TouchableOpacity
+            key={category.id}
+            style={[
+              styles.categoryButton, 
+              activeCategory === category.name && styles.activeCategoryButton
+            ]}
+            onPress={() => setActiveCategory(category.name)}
+          >
+            <Text style={[
+              styles.categoryButtonText, 
+              activeCategory === category.name && styles.activeCategoryButtonText
+            ]}>
+              {category.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#F47B20" />
@@ -180,6 +234,13 @@ const OrdersListScreen = ({ navigation }) => {
           renderItem={renderOrderItem}
           keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContainer}
+          onEndReached={() => {
+            if (!loadingMore && hasMore) {
+              fetchOrders(activeFilter);
+            }
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
         />
       )}
     </View>
@@ -293,6 +354,41 @@ const styles = StyleSheet.create({
   statusPending: {
     backgroundColor: '#fff3e0',
     color: '#f57c00',
+  },
+  categoriesContainer: {
+    backgroundColor: 'white',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    marginRight: 8,
+  },
+  activeCategoryButton: {
+    backgroundColor: '#F47B20',
+  },
+  categoryButtonText: {
+    color: '#666',
+    fontWeight: '500',
+  },
+  activeCategoryButtonText: {
+    color: 'white',
+  },
+  footerLoader: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    gap: 8,
+  },
+  loadingMoreText: {
+    color: '#666',
+    fontSize: 14,
   },
 });
 
