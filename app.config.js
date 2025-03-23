@@ -23,7 +23,8 @@ module.exports = {
     package: 'com.yourcompany.invapp'
   },
   web: {
-    favicon: './assets/favicon.png'
+    favicon: './assets/favicon.png',
+    bundler: 'webpack'
   },
   extra: {
     eas: {
